@@ -1,0 +1,13 @@
+[package]
+name = "terminaste-integration-tests"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+crossbeam-channel.workspace = true
+terminaste-pty = { path = "../terminaste-pty" }
+terminaste-settings = { path = "../terminaste-settings" }
+terminaste-ui = { path = "../terminaste-ui" }

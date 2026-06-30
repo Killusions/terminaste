@@ -1,0 +1,362 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Settings",
+  "type": "object",
+  "properties": {
+    "appearance": {
+      "default": {
+        "block_spacing": "compact",
+        "cursor_style": "block",
+        "minimum_contrast": true,
+        "mode": "system",
+        "window_opacity": 1.0,
+        "zero_state_blocks": true
+      },
+      "allOf": [
+        {
+          "$ref": "#/definitions/AppearanceSettings"
+        }
+      ]
+    },
+    "font": {
+      "default": {
+        "family": "JetBrains Mono, SF Mono, Menlo, Consolas, monospace",
+        "ligatures": true,
+        "line_height": 1.25,
+        "size": 13.0,
+        "weight": 400
+      },
+      "allOf": [
+        {
+          "$ref": "#/definitions/FontSettings"
+        }
+      ]
+    },
+    "terminal": {
+      "default": {
+        "alternate_screen_padding": 0,
+        "audible_bell": false,
+        "background_find": true,
+        "clipboard_escape_policy": "deny",
+        "max_grid_rows": 50000,
+        "scrollback_lines_per_tick": 3
+      },
+      "allOf": [
+        {
+          "$ref": "#/definitions/TerminalSettings"
+        }
+      ]
+    },
+    "input": {
+      "default": {
+        "control_tab_behavior": "ordered-tabs",
+        "keybindings": {
+          "override_file": null
+        },
+        "left_alt_is_meta": false,
+        "right_alt_is_meta": false,
+        "vim_like_editing": false
+      },
+      "allOf": [
+        {
+          "$ref": "#/definitions/InputSettings"
+        }
+      ]
+    },
+    "workspace": {
+      "default": {
+        "close_last_tab_closes_window": false,
+        "quick_access_enabled": false,
+        "quick_access_position": "top",
+        "restore_sessions": true,
+        "tab_layout": "horizontal"
+      },
+      "allOf": [
+        {
+          "$ref": "#/definitions/WorkspaceSettings"
+        }
+      ]
+    },
+    "startup": {
+      "default": {
+        "shell": null,
+        "working_directory": null
+      },
+      "allOf": [
+        {
+          "$ref": "#/definitions/StartupSettings"
+        }
+      ]
+    },
+    "privacy": {
+      "default": {
+        "redaction_patterns": [
+          "(?i)(password|token|secret|api[_-]?key)=\\S+",
+          "[a-z]+://[^:@\\s]+:[^@\\s]+@"
+        ]
+      },
+      "allOf": [
+        {
+          "$ref": "#/definitions/PrivacySettings"
+        }
+      ]
+    }
+  },
+  "definitions": {
+    "AppearanceSettings": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "default": "system",
+          "allOf": [
+            {
+              "$ref": "#/definitions/AppearanceMode"
+            }
+          ]
+        },
+        "block_spacing": {
+          "default": "compact",
+          "allOf": [
+            {
+              "$ref": "#/definitions/BlockSpacing"
+            }
+          ]
+        },
+        "window_opacity": {
+          "default": 1.0,
+          "type": "number",
+          "format": "float"
+        },
+        "minimum_contrast": {
+          "default": true,
+          "type": "boolean"
+        },
+        "zero_state_blocks": {
+          "default": true,
+          "type": "boolean"
+        },
+        "cursor_style": {
+          "default": "block",
+          "allOf": [
+            {
+              "$ref": "#/definitions/CursorStyle"
+            }
+          ]
+        }
+      }
+    },
+    "AppearanceMode": {
+      "type": "string",
+      "enum": [
+        "system",
+        "dark",
+        "light"
+      ]
+    },
+    "BlockSpacing": {
+      "type": "string",
+      "enum": [
+        "normal",
+        "compact"
+      ]
+    },
+    "CursorStyle": {
+      "type": "string",
+      "enum": [
+        "block",
+        "bar",
+        "underline"
+      ]
+    },
+    "FontSettings": {
+      "type": "object",
+      "properties": {
+        "family": {
+          "default": "JetBrains Mono, SF Mono, Menlo, Consolas, monospace",
+          "type": "string"
+        },
+        "size": {
+          "default": 13.0,
+          "type": "number",
+          "format": "float"
+        },
+        "weight": {
+          "default": 400,
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0.0
+        },
+        "line_height": {
+          "default": 1.25,
+          "type": "number",
+          "format": "float"
+        },
+        "ligatures": {
+          "default": true,
+          "type": "boolean"
+        }
+      }
+    },
+    "TerminalSettings": {
+      "type": "object",
+      "properties": {
+        "audible_bell": {
+          "default": false,
+          "type": "boolean"
+        },
+        "max_grid_rows": {
+          "default": 50000,
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "alternate_screen_padding": {
+          "default": 0,
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0.0
+        },
+        "clipboard_escape_policy": {
+          "default": "deny",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ClipboardEscapePolicy"
+            }
+          ]
+        },
+        "background_find": {
+          "default": true,
+          "type": "boolean"
+        },
+        "scrollback_lines_per_tick": {
+          "default": 3,
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        }
+      }
+    },
+    "ClipboardEscapePolicy": {
+      "type": "string",
+      "enum": [
+        "deny",
+        "write-only",
+        "read-write"
+      ]
+    },
+    "InputSettings": {
+      "type": "object",
+      "properties": {
+        "left_alt_is_meta": {
+          "default": false,
+          "type": "boolean"
+        },
+        "right_alt_is_meta": {
+          "default": false,
+          "type": "boolean"
+        },
+        "control_tab_behavior": {
+          "default": "ordered-tabs",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ControlTabBehavior"
+            }
+          ]
+        },
+        "vim_like_editing": {
+          "default": false,
+          "type": "boolean"
+        },
+        "keybindings": {
+          "default": {
+            "override_file": null
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingSettings"
+            }
+          ]
+        }
+      }
+    },
+    "ControlTabBehavior": {
+      "type": "string",
+      "enum": [
+        "ordered-tabs",
+        "most-recent-tab",
+        "most-recent-session"
+      ]
+    },
+    "KeybindingSettings": {
+      "type": "object",
+      "properties": {
+        "override_file": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "WorkspaceSettings": {
+      "type": "object",
+      "properties": {
+        "restore_sessions": {
+          "default": true,
+          "type": "boolean"
+        },
+        "close_last_tab_closes_window": {
+          "default": false,
+          "type": "boolean"
+        },
+        "tab_layout": {
+          "default": "horizontal",
+          "type": "string"
+        },
+        "quick_access_enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "quick_access_position": {
+          "default": "top",
+          "type": "string"
+        }
+      }
+    },
+    "StartupSettings": {
+      "type": "object",
+      "properties": {
+        "shell": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "working_directory": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "PrivacySettings": {
+      "type": "object",
+      "properties": {
+        "redaction_patterns": {
+          "default": [
+            "(?i)(password|token|secret|api[_-]?key)=\\S+",
+            "[a-z]+://[^:@\\s]+:[^@\\s]+@"
+          ],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

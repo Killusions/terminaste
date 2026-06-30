@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">terminaste icon</title>
+  <desc id="desc">A minimal rounded terminal window with a split prompt mark.</desc>
+  <defs>
+    <linearGradient id="g" x1="80" y1="56" x2="432" y2="456" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#67e8f9"/>
+      <stop offset="0.52" stop-color="#8b5cf6"/>
+      <stop offset="1" stop-color="#111827"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(50 50) scale(0.8046875)">
+    <rect width="512" height="512" rx="112" fill="#0b0c10"/>
+    <rect x="74" y="96" width="364" height="320" rx="46" fill="url(#g)"/>
+    <rect x="98" y="128" width="316" height="264" rx="30" fill="#0f1117" fill-opacity="0.92"/>
+    <path d="M156 210l62 46-62 46" fill="none" stroke="#f8fafc" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M250 306h102" fill="none" stroke="#67e8f9" stroke-width="26" stroke-linecap="round"/>
+    <path d="M98 174h316" stroke="#ffffff" stroke-opacity="0.12" stroke-width="2"/>
+    <circle cx="136" cy="151" r="9" fill="#ef4444"/>
+    <circle cx="166" cy="151" r="9" fill="#f59e0b"/>
+    <circle cx="196" cy="151" r="9" fill="#22c55e"/>
+  </g>
+</svg>

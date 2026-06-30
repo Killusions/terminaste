@@ -1,0 +1,22 @@
+#!/usr/bin/env sh
+set -eu
+
+ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+DIST_DIR="$ROOT_DIR/dist/terminaste-linux"
+BIN_PATH="$ROOT_DIR/target/ship/terminaste"
+
+cargo run -p terminaste-tools -- assets
+cargo build --profile ship --bin terminaste
+
+rm -rf "$DIST_DIR"
+mkdir -p "$DIST_DIR/bin" "$DIST_DIR/share/terminaste/assets"
+cp "$BIN_PATH" "$DIST_DIR/bin/terminaste"
+cp "$ROOT_DIR/LICENSE" "$DIST_DIR/LICENSE"
+cp "$ROOT_DIR/README.md" "$DIST_DIR/README.md"
+cp "$ROOT_DIR/assets/settings.schema.json" "$DIST_DIR/share/terminaste/assets/settings.schema.json"
+cp "$ROOT_DIR/assets/icon.png" "$DIST_DIR/share/terminaste/assets/icon.png"
+cp -R "$ROOT_DIR/assets/icons" "$DIST_DIR/share/terminaste/assets/icons"
+cp "$ROOT_DIR/assets/THIRD-PARTY-LICENSES.md" "$DIST_DIR/THIRD-PARTY-LICENSES.md"
+cp "$ROOT_DIR/assets/dependency-manifest.json" "$DIST_DIR/dependency-manifest.json"
+
+printf 'Packaged %s\n' "$DIST_DIR"

@@ -1,0 +1,20 @@
+[package]
+name = "terminaste-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "terminaste"
+path = "src/main.rs"
+
+[dependencies]
+eframe.workspace = true
+egui.workspace = true
+image.workspace = true
+terminaste-settings = { path = "../terminaste-settings" }
+terminaste-ui = { path = "../terminaste-ui" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+muda.workspace = true

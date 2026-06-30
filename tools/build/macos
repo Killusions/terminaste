@@ -1,0 +1,60 @@
+#!/usr/bin/env sh
+set -eu
+
+ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+DIST_DIR="$ROOT_DIR/dist/terminaste-macos"
+BIN_PATH="$ROOT_DIR/target/ship/terminaste"
+
+cargo run -p terminaste-tools -- assets
+cargo build --profile ship --bin terminaste
+
+rm -rf "$DIST_DIR"
+mkdir -p "$DIST_DIR/bin" "$DIST_DIR/assets"
+cp "$BIN_PATH" "$DIST_DIR/bin/terminaste"
+cp "$ROOT_DIR/LICENSE" "$DIST_DIR/LICENSE"
+cp "$ROOT_DIR/README.md" "$DIST_DIR/README.md"
+cp "$ROOT_DIR/assets/settings.schema.json" "$DIST_DIR/assets/settings.schema.json"
+cp "$ROOT_DIR/assets/icon.png" "$DIST_DIR/assets/icon.png"
+cp -R "$ROOT_DIR/assets/icons" "$DIST_DIR/assets/icons"
+cp "$ROOT_DIR/assets/THIRD-PARTY-LICENSES.md" "$DIST_DIR/THIRD-PARTY-LICENSES.md"
+cp "$ROOT_DIR/assets/dependency-manifest.json" "$DIST_DIR/dependency-manifest.json"
+
+APP_DIR="$DIST_DIR/terminaste.app"
+CONTENTS="$APP_DIR/Contents"
+ICONSET="$DIST_DIR/terminaste.iconset"
+VERSION="$(cargo pkgid -p terminaste-app | sed 's/.*[#@]//')"
+mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources" "$ICONSET"
+cp "$BIN_PATH" "$CONTENTS/MacOS/terminaste"
+cp "$ROOT_DIR/LICENSE" "$ROOT_DIR/assets/THIRD-PARTY-LICENSES.md" "$CONTENTS/Resources/"
+cp "$ROOT_DIR/assets/settings.schema.json" "$CONTENTS/Resources/"
+for size in 16 32 128 256 512; do
+  cp "$ROOT_DIR/assets/icons/icon-$size.png" "$ICONSET/icon_${size}x${size}.png"
+  retina=$((size * 2))
+  if [ -f "$ROOT_DIR/assets/icons/icon-$retina.png" ]; then
+    cp "$ROOT_DIR/assets/icons/icon-$retina.png" "$ICONSET/icon_${size}x${size}@2x.png"
+  fi
+done
+iconutil -c icns "$ICONSET" -o "$CONTENTS/Resources/terminaste.icns"
+rm -rf "$ICONSET"
+cat > "$CONTENTS/Info.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>terminaste</string>
+  <key>CFBundleDisplayName</key><string>terminaste</string>
+  <key>CFBundleIdentifier</key><string>com.terminaste.app</string>
+  <key>CFBundleExecutable</key><string>terminaste</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleVersion</key><string>$VERSION</string>
+  <key>CFBundleShortVersionString</key><string>$VERSION</string>
+  <key>CFBundleIconFile</key><string>terminaste.icns</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSPrincipalClass</key><string>NSApplication</string>
+</dict>
+</plist>
+EOF
+plutil -lint "$CONTENTS/Info.plist"
+codesign --force --sign - "$APP_DIR"
+
+printf 'Packaged %s\n' "$DIST_DIR"
