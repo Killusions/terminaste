@@ -1083,7 +1083,9 @@ impl TerminalWindow {
                     .into_any_element()
             }),
         )
-        .size_full();
+        .flex_1()
+        .min_h_0()
+        .w_full();
         let mut pane_view = div()
             .flex()
             .flex_col()
