@@ -201,13 +201,17 @@ impl TerminalPane {
                         }
                         self.selected_completion = 0;
                         self.completion_navigating = false;
-                        if self.history_search.is_some() {
+                        if self.history_search.is_some() || self.ghost_history_request {
                             for item in self.completions.iter().rev() {
                                 self.history_suggestions
                                     .retain(|command| command != &item.replacement);
                                 self.history_suggestions.insert(0, item.replacement.clone());
                             }
                             self.history_suggestions.truncate(1_000);
+                        }
+                        if self.ghost_history_request {
+                            self.dismiss_completions();
+                            return;
                         }
                         if self.completions.is_empty() && self.history_search.is_none() {
                             self.refresh_local_completions();

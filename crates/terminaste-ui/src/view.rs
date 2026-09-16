@@ -314,11 +314,7 @@ impl TerminalWindow {
                 }
             }
         } else if let Some(pane) = self.app.active_terminal_mut() {
-            pane.last_editor_cursor = pane.editor.cursor;
-            pane.dismiss_completions();
-            if pane.surface.input_bridge {
-                pane.sync_shell_editor();
-            }
+            pane.update_input();
         }
     }
     fn open_overlay(&mut self, overlay: Overlay) {
@@ -505,6 +501,9 @@ impl TerminalWindow {
             if let Some(pane) = self.app.active_terminal_mut() {
                 let suggestion = pane.history_suggestion(columns);
                 pane.ghost_dismissed = Some(pane.editor.text().to_owned());
+                if pane.ghost_history_request {
+                    pane.dismiss_completions();
+                }
                 if key == "right"
                     && !modifiers.shift
                     && !modifiers.control
@@ -2112,6 +2111,8 @@ impl Render for TerminalWindow {
                 };
                 pane.model
                     .set_default_colors(rgb(foreground), rgb(background));
+                let responses = pane.model.take_responses();
+                pane.write_terminal(responses);
                 pane.model
                     .set_history_limit(settings.terminal.max_grid_rows);
                 pane.model

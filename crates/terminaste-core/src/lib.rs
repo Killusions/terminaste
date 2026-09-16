@@ -323,6 +323,7 @@ pub struct TerminalModel {
     scroll_bottom: usize,
     responses: Vec<u8>,
     default_colors: [Rgb; 2],
+    report_color_scheme: bool,
 }
 
 impl TerminalModel {
@@ -358,6 +359,7 @@ impl TerminalModel {
             scroll_bottom: rows - 1,
             responses: Vec::new(),
             default_colors: [Rgb(238, 242, 255), Rgb(10, 11, 15)],
+            report_color_scheme: false,
         }
     }
 
@@ -383,7 +385,21 @@ impl TerminalModel {
     }
 
     pub fn set_default_colors(&mut self, foreground: Rgb, background: Rgb) {
+        let changed = self.default_colors != [foreground, background];
         self.default_colors = [foreground, background];
+        if changed && self.report_color_scheme {
+            self.respond_color_scheme();
+        }
+    }
+
+    fn respond_color_scheme(&mut self) {
+        let Rgb(r, g, b) = self.default_colors[1];
+        let light = u32::from(r) * 299 + u32::from(g) * 587 + u32::from(b) * 114 >= 128_000;
+        self.responses.extend_from_slice(if light {
+            b"\x1b[?997;2n"
+        } else {
+            b"\x1b[?997;1n"
+        });
     }
 
     pub fn resize(&mut self, cols: usize, rows: usize) {
@@ -993,6 +1009,7 @@ impl TerminalModel {
         match final_byte {
             b'm' => self.apply_sgr(&text),
             b'n' => match text.as_ref() {
+                "?996" => self.respond_color_scheme(),
                 "5" => self.responses.extend_from_slice(b"\x1b[0n"),
                 "6" => self.responses.extend_from_slice(
                     format!(
@@ -1005,6 +1022,11 @@ impl TerminalModel {
                 _ => {}
             },
             b'c' => self.responses.extend_from_slice(b"\x1b[?1;2c"),
+            b'p' if text == "?2031$" => {
+                let state = if self.report_color_scheme { 1 } else { 2 };
+                self.responses
+                    .extend_from_slice(format!("\x1b[?2031;{state}$y").as_bytes());
+            }
             b'r' => {
                 let nums = parse_numbers(&text);
                 let top = nums.first().copied().unwrap_or(1).max(1) - 1;
@@ -1222,6 +1244,7 @@ impl TerminalModel {
                     "1007" => self.modes.alternate_scroll = enabled,
                     "1047" | "1049" => self.set_alternate_screen(enabled),
                     "2004" => self.modes.bracketed_paste = enabled,
+                    "2031" => self.report_color_scheme = enabled,
                     "2026" => {}
                     _ => {}
                 }
@@ -1251,12 +1274,36 @@ impl TerminalModel {
 
     fn apply_osc(&mut self, data: &[u8], events: &mut Vec<TerminalEvent>) {
         let text = String::from_utf8_lossy(data);
+        if let Some(values) = text.strip_prefix("4;") {
+            let mut values = values.split(';');
+            while let (Some(index), Some(value)) = (values.next(), values.next()) {
+                if value == "?" {
+                    if let Ok(index) = index.parse::<usize>() {
+                        if index > 255 {
+                            continue;
+                        }
+                        if let Some(Rgb(r, g, b)) = xterm_256_color(index) {
+                            self.responses.extend_from_slice(
+                                format!(
+                                    "\x1b]4;{index};rgb:{:04x}/{:04x}/{:04x}\x1b\\",
+                                    u16::from(r) * 257,
+                                    u16::from(g) * 257,
+                                    u16::from(b) * 257
+                                )
+                                .as_bytes(),
+                            );
+                        }
+                    }
+                }
+            }
+            return;
+        }
         if let Some((code, values)) = text.split_once(';') {
-            if let Ok(start @ 10..=11) = code.parse::<usize>() {
+            if let Ok(start @ 10..=12) = code.parse::<usize>() {
                 for (offset, value) in values.split(';').enumerate() {
                     let code = start + offset;
-                    if value == "?" && code <= 11 {
-                        let Rgb(r, g, b) = self.default_colors[code - 10];
+                    if value == "?" && code <= 12 {
+                        let Rgb(r, g, b) = self.default_colors[usize::from(code == 11)];
                         self.responses.extend_from_slice(
                             format!(
                                 "\x1b]{code};rgb:{:04x}/{:04x}/{:04x}\x1b\\",
@@ -2189,6 +2236,35 @@ fn millis(duration: Duration) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn color_scheme_queries_and_notifications_follow_terminal_colors() {
+        let mut terminal = TerminalModel::new(10, 2, 100);
+        terminal.process_bytes(b"\x1b[?2031$p\x1b[?996n\x1b[?2031h\x1b[?2031$p");
+        assert_eq!(
+            terminal.take_responses(),
+            b"\x1b[?2031;2$y\x1b[?997;1n\x1b[?2031;1$y"
+        );
+        terminal.set_default_colors(Rgb(0, 0, 0), Rgb(255, 255, 255));
+        assert_eq!(terminal.take_responses(), b"\x1b[?997;2n");
+        terminal.set_default_colors(Rgb(0, 0, 0), Rgb(255, 255, 255));
+        assert!(terminal.take_responses().is_empty());
+        terminal.process_bytes(b"\x1b[?2031l");
+        terminal.set_default_colors(Rgb(255, 255, 255), Rgb(0, 0, 0));
+        assert!(terminal.take_responses().is_empty());
+        terminal.process_bytes(b"\x1b[?996n");
+        assert_eq!(terminal.take_responses(), b"\x1b[?997;1n");
+    }
+
+    #[test]
+    fn palette_queries_reply_to_each_requested_entry() {
+        let mut terminal = TerminalModel::new(10, 2, 100);
+        terminal.process_bytes(b"\x1b]4;16;?;231;?;256;?\x1b\\");
+        assert_eq!(
+            terminal.take_responses(),
+            b"\x1b]4;16;rgb:0000/0000/0000\x1b\\\x1b]4;231;rgb:ffff/ffff/ffff\x1b\\"
+        );
+    }
 
     #[test]
     fn color_queries_report_current_theme_with_both_terminators() {

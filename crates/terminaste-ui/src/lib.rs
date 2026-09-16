@@ -407,6 +407,7 @@ struct TerminalPane {
     history_offset: usize,
     history_search: Option<String>,
     ghost_dismissed: Option<String>,
+    ghost_history_request: bool,
     history_suggestions: Vec<String>,
     cwd: PathBuf,
     aliases: Vec<(String, String)>,
@@ -515,6 +516,7 @@ impl TerminalPane {
             history_offset: 0,
             history_search: None,
             ghost_dismissed: None,
+            ghost_history_request: false,
             history_suggestions: Vec::new(),
             cwd,
             aliases: Vec::new(),
@@ -680,7 +682,7 @@ impl TerminalPane {
             || !self.editor.preedit.is_empty()
             || self.editor.shell_command_mode
             || !self.completions.is_empty()
-            || self.surface.completion_request.is_some()
+            || (self.surface.completion_request.is_some() && !self.ghost_history_request)
             || self.ghost_dismissed.as_deref() == Some(text)
         {
             return None;
@@ -698,6 +700,24 @@ impl TerminalPane {
                     && unicode_width::UnicodeWidthStr::width(command.as_str()) < columns
             })
             .cloned()
+    }
+
+    fn update_input(&mut self) {
+        self.focus_input();
+        self.ghost_dismissed = None;
+        self.last_editor_cursor = self.editor.cursor;
+        self.dismiss_completions();
+        if !self.editor.text().is_empty()
+            && !self.editor.text().contains('\n')
+            && self.editor.cursor == self.editor.text().len()
+            && (self.surface.input_bridge || self.surface.query_bridge)
+            && self.history_suggestion(usize::MAX).is_none()
+        {
+            self.ghost_history_request = true;
+            self.request_shell_completions(true);
+        } else if self.surface.input_bridge {
+            self.sync_shell_editor();
+        }
     }
 
     fn move_completion(&mut self, up: bool) {
@@ -757,6 +777,7 @@ impl TerminalPane {
     }
 
     fn dismiss_completions(&mut self) {
+        self.ghost_history_request = false;
         self.history_search = None;
         self.history_offset = 0;
         self.completions.clear();
@@ -1005,6 +1026,50 @@ pub fn integration_frame_for_tests(name: &str, data_json: &str) -> Vec<u8> {
 #[cfg(test)]
 mod interaction_tests {
     use super::*;
+
+    #[test]
+    fn typing_no_loads_shell_history_without_opening_completion_panel() {
+        let mut pane = TerminalPane::fake();
+        pane.surface.input_bridge = true;
+        pane.editor.set_text("no".to_owned());
+        pane.ghost_dismissed = Some("no".to_owned());
+        pane.update_input();
+        assert!(pane.ghost_history_request);
+        assert!(pane.completions.is_empty());
+        let data = serde_json::json!({
+            "revision": pane.surface.input_revision,
+            "text": "no", "items": [{"text": "nosleep", "cursor": 7}]
+        });
+        pane.process_ordered_pty_bytes(&integration_frame_for_tests(
+            "completions",
+            &data.to_string(),
+        ));
+        assert_eq!(pane.history_suggestion(80).as_deref(), Some("nosleep"));
+        assert!(pane.completions.is_empty());
+        assert!(pane.surface.completion_request.is_none());
+        assert_eq!(pane.editor.text(), "no");
+    }
+
+    #[test]
+    fn theme_queries_reach_the_pty_with_terminal_colors() {
+        let mut pane = TerminalPane::fake();
+        pane.model.set_default_colors(
+            terminaste_core::Rgb(238, 242, 255),
+            terminaste_core::Rgb(10, 11, 15),
+        );
+        pane.process_ordered_pty_bytes(b"\x1b[?996n\x1b]11;?\x07");
+        let command = pane
+            .fake_pty_channels
+            .as_ref()
+            .unwrap()
+            .commands
+            .try_recv()
+            .unwrap();
+        let PtyCommand::Write(bytes) = command else {
+            panic!("expected terminal reply")
+        };
+        assert_eq!(bytes, b"\x1b[?997;1n\x1b]11;rgb:0a0a/0b0b/0f0f\x1b\\");
+    }
 
     #[test]
     fn history_ghost_requires_an_exact_prefix_and_room_on_one_line() {
