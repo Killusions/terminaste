@@ -146,6 +146,9 @@ fn third_party_license_text(packages: &[LockedPackage]) -> String {
             package.checksum.as_deref().unwrap_or("")
         ));
     }
+    text.push_str(
+        "\n## Bundled fonts\n\n### JetBrains Mono\n\nCopyright 2020 The JetBrains Mono Project Authors. JetBrains Mono is distributed under the SIL Open Font License 1.1. The complete license text is included at `assets/fonts/JetBrainsMono-OFL.txt`.\n",
+    );
     text
 }
 

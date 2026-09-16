@@ -123,6 +123,8 @@ pub enum KeybindingAction {
     FocusInput,
     CopySelection,
     CopyBlock,
+    CopyCommand,
+    CopyOutput,
     Paste,
     PasteEscaped,
     PastePath,
@@ -204,6 +206,8 @@ impl KeybindingAction {
             Self::FocusInput => "Focus command input",
             Self::CopySelection => "Copy selection",
             Self::CopyBlock => "Copy block",
+            Self::CopyCommand => "Copy command",
+            Self::CopyOutput => "Copy output",
             Self::Paste => "Paste",
             Self::PasteEscaped => "Paste escaped",
             Self::PastePath => "Paste path",
@@ -701,6 +705,8 @@ pub fn default_action_map() -> BTreeMap<KeybindingAction, Vec<String>> {
         }],
     );
     map.insert(CopySelection, vec![format!("{app}+c")]);
+    map.insert(CopyCommand, vec![format!("{app}+alt+c")]);
+    map.insert(CopyOutput, vec![format!("{app}+alt+shift+c")]);
     map.insert(
         CopyBlock,
         vec![if cfg!(target_os = "macos") {

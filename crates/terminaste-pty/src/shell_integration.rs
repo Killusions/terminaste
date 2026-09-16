@@ -110,7 +110,10 @@ pub fn shell_startup(shell: &str, session: &str) -> anyhow::Result<ShellStartup>
                 ),
                 (
                     "TERMINASTE_ORIGINAL_ZDOTDIR".to_owned(),
-                    std::env::var("ZDOTDIR").unwrap_or_default(),
+                    std::env::var("ZDOTDIR")
+                        .ok()
+                        .filter(|path| !path.contains("/terminaste-shell-integration"))
+                        .unwrap_or_default(),
                 ),
                 (
                     "TERMINASTE_SHELL_FAMILY".to_owned(),
@@ -225,11 +228,19 @@ fn zsh_startup_files() -> Vec<(&'static str, String)> {
     let mut files = vec![(
         ".zshenv",
         r#"typeset -g __TERMINASTE_USER_ZDOTDIR="${TERMINASTE_ORIGINAL_ZDOTDIR:-$HOME}"
+if [[ "$__TERMINASTE_USER_ZDOTDIR" == "$TERMINASTE_INTEGRATION_DIR" ]]; then
+  __TERMINASTE_USER_ZDOTDIR="$HOME"
+fi
+if [[ "$__TERMINASTE_USER_ZDOTDIR" == *"/terminaste-shell-integration"* ]]; then
+  __TERMINASTE_USER_ZDOTDIR="$HOME"
+fi
 ZDOTDIR="$__TERMINASTE_USER_ZDOTDIR"
-if [[ -r "$__TERMINASTE_USER_ZDOTDIR/.zshenv" ]]; then
+if [[ -r "$__TERMINASTE_USER_ZDOTDIR/.zshenv" && "$__TERMINASTE_USER_ZDOTDIR/.zshenv" != "$TERMINASTE_INTEGRATION_DIR/.zshenv" ]]; then
   source "$__TERMINASTE_USER_ZDOTDIR/.zshenv"
 fi
-__TERMINASTE_USER_ZDOTDIR="${ZDOTDIR:-$HOME}"
+if [[ -n "${ZDOTDIR:-}" && "$ZDOTDIR" != "$TERMINASTE_INTEGRATION_DIR" ]]; then
+  __TERMINASTE_USER_ZDOTDIR="$ZDOTDIR"
+fi
 ZDOTDIR="$TERMINASTE_INTEGRATION_DIR"
 "#
         .to_owned(),

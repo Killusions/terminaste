@@ -322,6 +322,7 @@ pub struct TerminalModel {
     scroll_top: usize,
     scroll_bottom: usize,
     responses: Vec<u8>,
+    default_colors: [Rgb; 2],
 }
 
 impl TerminalModel {
@@ -356,6 +357,7 @@ impl TerminalModel {
             scroll_top: 0,
             scroll_bottom: rows - 1,
             responses: Vec::new(),
+            default_colors: [Rgb(238, 242, 255), Rgb(10, 11, 15)],
         }
     }
 
@@ -378,6 +380,10 @@ impl TerminalModel {
 
     pub fn take_responses(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.responses)
+    }
+
+    pub fn set_default_colors(&mut self, foreground: Rgb, background: Rgb) {
+        self.default_colors = [foreground, background];
     }
 
     pub fn resize(&mut self, cols: usize, rows: usize) {
@@ -614,6 +620,38 @@ impl TerminalModel {
             block.output = self.pending_output.trim_end().to_owned();
         }
         blocks
+    }
+
+    pub fn command_block_count(&self) -> usize {
+        self.blocks.len()
+    }
+
+    pub fn command_block(&self, index: usize) -> Option<CommandBlock> {
+        let mut block = self.blocks.get(index)?.clone();
+        if block.running {
+            block.output = self.pending_output.trim_end().to_owned();
+        }
+        Some(block)
+    }
+
+    pub fn running_command_output(&self) -> String {
+        let Some(block) = self.blocks.iter().rev().find(|block| block.running) else {
+            return String::new();
+        };
+        let start = block.started_row.max(self.discarded_rows);
+        let end = self.visible_row_start() + self.rows as u64;
+        let mut output = String::new();
+        for row in (start..end).filter_map(|row| self.row_at(row)) {
+            if row.wrapped {
+                for cell in row.cells.iter().filter(|cell| !cell.spacer) {
+                    output.push_str(&cell.text);
+                }
+            } else {
+                output.push_str(&row.text());
+                output.push('\n');
+            }
+        }
+        output.trim_end().to_owned()
     }
 
     pub fn screen_snapshot(&self) -> TerminalSnapshot {
@@ -1213,6 +1251,26 @@ impl TerminalModel {
 
     fn apply_osc(&mut self, data: &[u8], events: &mut Vec<TerminalEvent>) {
         let text = String::from_utf8_lossy(data);
+        if let Some((code, values)) = text.split_once(';') {
+            if let Ok(start @ 10..=11) = code.parse::<usize>() {
+                for (offset, value) in values.split(';').enumerate() {
+                    let code = start + offset;
+                    if value == "?" && code <= 11 {
+                        let Rgb(r, g, b) = self.default_colors[code - 10];
+                        self.responses.extend_from_slice(
+                            format!(
+                                "\x1b]{code};rgb:{:04x}/{:04x}/{:04x}\x1b\\",
+                                u16::from(r) * 257,
+                                u16::from(g) * 257,
+                                u16::from(b) * 257
+                            )
+                            .as_bytes(),
+                        );
+                    }
+                }
+                return;
+            }
+        }
         if let Some(title) = text.strip_prefix("0;").or_else(|| text.strip_prefix("2;")) {
             self.title = title.to_owned();
             events.push(TerminalEvent::TitleChanged(self.title.clone()));
@@ -2131,6 +2189,25 @@ fn millis(duration: Duration) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn color_queries_report_current_theme_with_both_terminators() {
+        let mut terminal = TerminalModel::new(10, 2, 100);
+        terminal.set_default_colors(Rgb(238, 242, 255), Rgb(10, 11, 15));
+        for byte in b"\x1b]10;?;?\x07" {
+            terminal.process_bytes(&[*byte]);
+        }
+        assert_eq!(
+            terminal.take_responses(),
+            b"\x1b]10;rgb:eeee/f2f2/ffff\x1b\\\x1b]11;rgb:0a0a/0b0b/0f0f\x1b\\"
+        );
+        terminal.set_default_colors(Rgb(0, 0, 0), Rgb(255, 255, 255));
+        terminal.process_bytes(b"\x1b]11;?\x1b\\");
+        assert_eq!(
+            terminal.take_responses(),
+            b"\x1b]11;rgb:ffff/ffff/ffff\x1b\\"
+        );
+    }
 
     #[test]
     fn printable_bytes_update_cells_and_cursor() {

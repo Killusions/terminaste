@@ -24,10 +24,9 @@ anyhow = "1.0.98"
 base64 = "0.22.1"
 crossbeam-channel = "0.5.15"
 directories = "6.0.0"
-eframe = { version = "0.31.1", default-features = true, features = ["wgpu", "persistence"] }
-egui = "0.31.1"
+gpui = { git = "https://github.com/zed-industries/zed", rev = "ba7da93e5ccc2b630077b2ae26c7581f3c21f984" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "ba7da93e5ccc2b630077b2ae26c7581f3c21f984", features = ["runtime_shaders", "font-kit", "wayland", "x11"] }
 image = { version = "0.25.6", default-features = false, features = ["png"] }
-muda = "0.17.1"
 portable-pty = "0.8.1"
 resvg = "0.45.1"
 schemars = { version = "0.8.22", features = ["preserve_order"] }
