@@ -7,8 +7,51 @@ use super::*;
 #[derive(Serialize, Deserialize)]
 struct SavedSession {
     version: u8,
+    #[serde(default)]
+    window: Option<SavedWindow>,
     active_tab: usize,
     tabs: Vec<SavedTab>,
+}
+
+#[derive(Serialize, Deserialize)]
+enum SavedWindow {
+    Windowed([f32; 4]),
+    Maximized([f32; 4]),
+    Fullscreen([f32; 4]),
+}
+
+impl SavedWindow {
+    fn capture(window: gpui::WindowBounds) -> Self {
+        let bounds = window.get_bounds();
+        let values = [
+            bounds.origin.x.into(),
+            bounds.origin.y.into(),
+            bounds.size.width.into(),
+            bounds.size.height.into(),
+        ];
+        match window {
+            gpui::WindowBounds::Windowed(_) => Self::Windowed(values),
+            gpui::WindowBounds::Maximized(_) => Self::Maximized(values),
+            gpui::WindowBounds::Fullscreen(_) => Self::Fullscreen(values),
+        }
+    }
+
+    fn restore(&self) -> Option<gpui::WindowBounds> {
+        let (Self::Windowed(values) | Self::Maximized(values) | Self::Fullscreen(values)) = self;
+        let [x, y, width, height] = *values;
+        if !values.iter().all(|value| value.is_finite()) || width < 160. || height < 160. {
+            return None;
+        }
+        let bounds = gpui::Bounds::new(
+            gpui::point(gpui::px(x), gpui::px(y)),
+            gpui::size(gpui::px(width), gpui::px(height)),
+        );
+        Some(match self {
+            Self::Windowed(_) => gpui::WindowBounds::Windowed(bounds),
+            Self::Maximized(_) => gpui::WindowBounds::Maximized(bounds),
+            Self::Fullscreen(_) => gpui::WindowBounds::Fullscreen(bounds),
+        })
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -31,6 +74,7 @@ impl SavedSession {
     fn capture(app: &TerminasteApp) -> Self {
         Self {
             version: 1,
+            window: app.window_bounds.map(SavedWindow::capture),
             active_tab: app.active_tab,
             tabs: app
                 .tabs
@@ -101,6 +145,7 @@ impl SavedSession {
             })
             .collect();
         app.active_tab = self.active_tab.min(app.tabs.len() - 1);
+        app.window_bounds = self.window.and_then(|window| window.restore());
         Ok(())
     }
 
@@ -183,6 +228,37 @@ impl TerminasteApp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn window_geometry_round_trips_and_old_sessions_remain_readable() {
+        let bounds = gpui::Bounds::new(
+            gpui::point(gpui::px(-640.), gpui::px(120.)),
+            gpui::size(gpui::px(900.), gpui::px(650.)),
+        );
+        let mut app = TerminasteApp::headless_for_tests(Settings::default());
+        for window in [
+            gpui::WindowBounds::Windowed(bounds),
+            gpui::WindowBounds::Maximized(bounds),
+            gpui::WindowBounds::Fullscreen(bounds),
+        ] {
+            app.window_bounds = Some(window);
+            let bytes = serde_json::to_vec(&SavedSession::capture(&app)).unwrap();
+            let mut restored = TerminasteApp::headless_for_tests(Settings::default());
+            serde_json::from_slice::<SavedSession>(&bytes)
+                .unwrap()
+                .apply(&mut restored)
+                .unwrap();
+            assert_eq!(restored.window_bounds(), Some(window));
+        }
+        let mut saved = serde_json::to_value(SavedSession::capture(&app)).unwrap();
+        saved.as_object_mut().unwrap().remove("window");
+        serde_json::from_value::<SavedSession>(saved)
+            .unwrap()
+            .apply(&mut app)
+            .unwrap();
+        assert_eq!(app.window_bounds(), None);
+        assert_eq!(SavedWindow::Windowed([0., 0., 0., 650.]).restore(), None);
+    }
 
     #[test]
     fn restart_restores_tabs_splits_directories_and_blocks_without_running_commands() {

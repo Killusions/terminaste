@@ -28,6 +28,7 @@ pub use theme::TerminasteTheme;
 pub use view::{install_actions, TerminalWindow};
 
 pub struct TerminasteApp {
+    window_bounds: Option<gpui::WindowBounds>,
     loaded: LoadedSettings,
     tabs: Vec<TabState>,
     active_tab: usize,
@@ -47,6 +48,7 @@ pub struct TerminalPaneLayoutSnapshot {
 impl TerminasteApp {
     pub fn new(loaded: LoadedSettings) -> Self {
         let mut app = Self {
+            window_bounds: None,
             watcher: Some(terminaste_settings::SettingsWatcher::new(
                 loaded.path.clone(),
                 Duration::from_millis(200),
@@ -68,6 +70,7 @@ impl TerminasteApp {
 
     pub fn headless_for_tests(settings: Settings) -> Self {
         Self {
+            window_bounds: None,
             loaded: LoadedSettings {
                 settings,
                 path: PathBuf::from("test-settings.toml"),
@@ -87,6 +90,10 @@ impl TerminasteApp {
 
     pub fn tab_count(&self) -> usize {
         self.tabs.len()
+    }
+
+    pub fn window_bounds(&self) -> Option<gpui::WindowBounds> {
+        self.window_bounds
     }
 
     pub fn active_pane_count(&self) -> usize {

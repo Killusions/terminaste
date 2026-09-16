@@ -174,7 +174,17 @@ pub struct TerminalWindow {
 }
 
 impl TerminalWindow {
-    pub fn new(app: TerminasteApp, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(mut app: TerminasteApp, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        app.window_bounds = Some(window.window_bounds());
+        cx.observe_window_bounds(window, |this, window, _| {
+            this.app.window_bounds = Some(window.window_bounds());
+        })
+        .detach();
+        cx.on_app_quit(|this, _| {
+            this.app.persist_session();
+            std::future::ready(())
+        })
+        .detach();
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
         cx.on_release(|this, _| this.app.persist_session()).detach();

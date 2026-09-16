@@ -12,10 +12,13 @@ fn main() {
             )])
             .expect("bundled terminal font must load");
         install_actions(cx);
-        let bounds = Bounds::centered(None, size(px(1180.), px(760.)), cx);
+        let app = TerminasteApp::new(load_settings());
+        let bounds = app.window_bounds().unwrap_or_else(|| {
+            WindowBounds::Windowed(Bounds::centered(None, size(px(1180.), px(760.)), cx))
+        });
         cx.open_window(
             WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(bounds)),
+                window_bounds: Some(bounds),
                 window_min_size: Some(size(px(160.), px(160.))),
                 titlebar: Some(TitlebarOptions {
                     title: Some("terminaste".into()),
@@ -23,9 +26,7 @@ fn main() {
                 }),
                 ..Default::default()
             },
-            |window, cx| {
-                cx.new(|cx| TerminalWindow::new(TerminasteApp::new(load_settings()), window, cx))
-            },
+            |window, cx| cx.new(|cx| TerminalWindow::new(app, window, cx)),
         )
         .expect("could not open terminal window");
         cx.on_window_closed(|cx, _| {
