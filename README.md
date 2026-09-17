@@ -2,129 +2,114 @@
 
 > A modern terminal you'll love.
 
-terminaste is a native Rust terminal that treats commands as useful, searchable
-blocks instead of an undifferentiated stream of text. It is intentionally small:
-one app, one settings file, and no account, background service, or web runtime.
+terminaste brings a modern UX to the terminal. It has a visual, IDE-style input
+and turns commands and output into clear, parseable blocks. It is built in Rust
+with GPUI for native GPU rendering and a fast, responsive feel.
+
+It stays minimal: just a terminal, with an open MIT license.
 
 > [!IMPORTANT]
-> terminaste is early software. It has only been tested with zsh on macOS on
-> Apple silicon. Bash, fish, PowerShell, Linux, Windows, and Intel Mac support are
-> present in parts of the codebase but are not release-tested yet.
+> terminaste is early software. zsh on macOS with Apple silicon is tested most.
+> Bash, fish, PowerShell, Linux, Windows, and Intel Mac are supported but still
+> largely untested.
 
-## Functionality
+## Modern terminal UX
 
-- Command blocks keep the command, output, exit status, and duration together.
-- Tabs and resizable horizontal or vertical split panes support parallel work.
-- Search, block filtering, selection, and dedicated copy-command/copy-output
-  actions make old terminal output useful again.
-- Shell-aware history suggestions and command/path completion stay beside the
-  input instead of taking over the screen.
-- A command palette, editable keybindings, appearance controls, and live-reloaded
-  TOML settings keep common actions close without filling the UI with chrome.
-- Session state restores tabs and panes between launches.
+- A fancy IDE-style input stays at the bottom of the window.
+- Commands, output, exit status, and duration form parseable blocks.
+- Tabs and horizontal or vertical split panes help with parallel work.
+- Search, filters, and selection make old output easy to use.
+- Copy a whole block, only its command, or only its output.
+- Shell history, command completion, and path completion stay close to the input.
+- A command palette and keyboard shortcuts keep the modern UX quick and simple.
+- Sessions restore tabs and panes after a restart.
 
-## UX
+## Native and responsive
 
-The input remains anchored at the bottom while completed commands form a readable
-history above it. Output can still be selected like a normal terminal, while a
-whole command block, its command, or only its output can also be copied directly.
-Keyboard-first actions cover navigation, panes, tabs, search, and settings.
+terminaste is a native Rust app built with GPUI and native GPU rendering. It does
+not use Electron or a browser engine. Input, PTY work, parsing, and rendering live
+in small focused crates. Release builds use thin LTO, and scrollback has a limit
+to keep long sessions under control.
 
-The bundled JetBrains Mono font gives a consistent first launch. Dark, light, and
-system appearance modes are available, and settings live in
-`~/Library/Application Support/com.terminaste.terminaste/settings.toml` on macOS.
+There are no benchmark claims yet. The goal is a responsive terminal with modern
+UX and minimal overhead.
 
-## Performance and minimalness
+## Install with Homebrew
 
-terminaste is a native Rust application rendered with GPUI. It does not embed
-Electron or a browser engine. PTY I/O, terminal parsing, completion, and rendering
-are separated into focused crates; release builds use thin LTO and a single code
-generation unit. Scrollback has a configurable bound so long sessions do not grow
-without limit.
-
-There are no benchmark promises yet. The current goal is immediate input,
-streaming output, and stable suggestions with as little machinery as practical.
-
-## Install
-
-### Homebrew
-
-The current macOS release is not Apple-notarized. Install the cask without
-quarantine so macOS can launch the unsigned/ad-hoc-signed executable:
+The Homebrew release is only for Apple silicon Macs. It is not Apple-notarized,
+so use `--no-quarantine` to open the unsigned/ad-hoc-signed app:
 
 ```sh
 brew tap killusions/terminaste https://github.com/Killusions/terminaste
 brew install --cask --no-quarantine killusions/terminaste/terminaste
 ```
 
-Upgrade or remove it with:
+Update or remove it with:
 
 ```sh
 brew upgrade --cask --no-quarantine terminaste
 brew uninstall --cask terminaste
 ```
 
-### Download
+## Download
 
 Download `terminaste-macos-arm64.tar.gz` from the
-[latest release](https://github.com/Killusions/terminaste/releases/latest), extract
+[latest release](https://github.com/Killusions/terminaste/releases/latest), unpack
 it, and move `terminaste.app` to `/Applications`.
 
-If the archive was downloaded by a browser and macOS says the app cannot be
-verified, remove the quarantine attribute from this app only, then open it again:
+If macOS still blocks the app, remove quarantine from this app only:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/terminaste.app
 ```
 
-Only do this for an archive downloaded from the official release page.
+Only do this for a file from the official release page.
 
-### Build and run
+## Build and run
 
-Install the stable Rust toolchain and the macOS command-line developer tools,
-then run:
+Install stable Rust and the macOS command-line developer tools, then run:
 
 ```sh
 cargo run --release -p terminaste-app
 ```
 
-Create the distributable app and archive with:
+Build the macOS app, archive, and checksum with:
 
 ```sh
 tools/release/macos
 ```
 
-The archive and SHA-256 checksum are written to `dist/`.
+Run all formatting, lint, asset, and test checks with:
 
-## Reusable crates
+```sh
+tools/check.sh
+```
 
-The UI and application crates depend on a pinned GPUI Git revision and are not
-published to crates.io. The independent building blocks are publishable:
+## Rust crates
+
+These small building blocks can be published to crates.io:
 
 - `terminaste-core`
 - `terminaste-completion`
 - `terminaste-settings`
 - `terminaste-pty`
 
-Validate their packages locally:
+Check the packages locally:
 
 ```sh
 tools/release/publish-crates
 ```
 
-Maintainers can publish the current workspace version in dependency order with
-`tools/release/publish-crates --execute` after setting `CARGO_REGISTRY_TOKEN` or
-logging in with `cargo login`.
-
-## Development
-
-Run formatting, lints, generated-asset checks, and unit/integration tests with:
+Publish the workspace version in the correct order:
 
 ```sh
-tools/check.sh
+tools/release/publish-crates --execute
 ```
+
+The app and UI crates stay in this repository because GPUI is pinned to a Git
+revision.
 
 ## License
 
-terminaste is released under the [MIT License](LICENSE). Bundled fonts and other
-dependency notices are listed in [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md).
+terminaste uses the [MIT License](LICENSE). Third-party notices are in
+[THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md).

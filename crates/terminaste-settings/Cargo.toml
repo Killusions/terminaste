@@ -9,7 +9,7 @@ homepage.workspace = true
 readme.workspace = true
 keywords.workspace = true
 categories.workspace = true
-description = "Typed settings, keybindings, and schema generation for terminaste"
+description = "Typed settings and keybindings for terminaste"
 
 [dependencies]
 anyhow.workspace = true

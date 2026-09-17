@@ -9,7 +9,7 @@ homepage.workspace = true
 readme.workspace = true
 keywords.workspace = true
 categories.workspace = true
-description = "Terminal state, command blocks, selection, and search primitives for terminaste"
+description = "Parseable terminal state and command blocks for terminaste"
 
 [dependencies]
 serde.workspace = true

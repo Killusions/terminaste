@@ -9,7 +9,7 @@ homepage.workspace = true
 readme.workspace = true
 keywords.workspace = true
 categories.workspace = true
-description = "Shell-aware command and filesystem completion primitives for terminaste"
+description = "Fast shell and path completion for terminaste"
 
 [dependencies]
 serde.workspace = true

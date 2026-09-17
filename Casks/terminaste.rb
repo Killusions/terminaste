@@ -4,7 +4,7 @@ cask "terminaste" do
 
   url "https://github.com/Killusions/terminaste/releases/latest/download/terminaste-macos-arm64.tar.gz"
   name "terminaste"
-  desc "Modern terminal with command blocks, completion, tabs, and split panes"
+  desc "Native GPUI terminal with modern UX and IDE-style input"
   homepage "https://github.com/Killusions/terminaste"
 
   depends_on arch: :arm64
