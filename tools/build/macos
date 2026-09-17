@@ -47,6 +47,5 @@ cat > "$CONTENTS/Info.plist" <<EOF
 </plist>
 EOF
 plutil -lint "$CONTENTS/Info.plist"
-codesign --force --sign - "$APP_DIR"
 
 printf 'Packaged %s\n' "$DIST_DIR"

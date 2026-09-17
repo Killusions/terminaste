@@ -4,7 +4,7 @@ cask "terminaste" do
 
   url "https://github.com/Killusions/terminaste/releases/latest/download/terminaste-macos-arm64.tar.gz"
   name "terminaste"
-  desc "Native GPUI terminal with modern UX and IDE-style input"
+  desc "Modern terminal with a visual IDE-style input, built native"
   homepage "https://github.com/Killusions/terminaste"
 
   depends_on arch: :arm64
@@ -13,11 +13,12 @@ cask "terminaste" do
   app "terminaste.app"
 
   caveats <<~EOS
-    terminaste is currently distributed without Apple notarization.
+    terminaste is currently distributed without code signing or Apple notarization.
 
-    Install with --no-quarantine so macOS can launch the unsigned/ad-hoc-signed app:
-      brew install --cask --no-quarantine killusions/terminaste/terminaste
+    Remove quarantine after installing so macOS can launch it:
+      xattr -dr com.apple.quarantine /Applications/terminaste.app
 
-    The release has only been tested with zsh on macOS on Apple silicon.
+    zsh on macOS with Apple silicon is tested most. Other supported shells and
+    platforms are largely untested.
   EOS
 end

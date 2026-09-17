@@ -36,18 +36,20 @@ UX and minimal overhead.
 
 ## Install with Homebrew
 
-The Homebrew release is only for Apple silicon Macs. It is not Apple-notarized,
-so use `--no-quarantine` to open the unsigned/ad-hoc-signed app:
+The Homebrew release is only for Apple silicon Macs. It is not code signed or
+Apple-notarized, so remove quarantine after installing it:
 
 ```sh
 brew tap killusions/terminaste https://github.com/Killusions/terminaste
-brew install --cask --no-quarantine killusions/terminaste/terminaste
+brew install --cask killusions/terminaste/terminaste
+xattr -dr com.apple.quarantine /Applications/terminaste.app
 ```
 
 Update or remove it with:
 
 ```sh
-brew upgrade --cask --no-quarantine terminaste
+brew upgrade --cask terminaste
+xattr -dr com.apple.quarantine /Applications/terminaste.app
 brew uninstall --cask terminaste
 ```
 
