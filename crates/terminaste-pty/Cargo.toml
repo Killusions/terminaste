@@ -21,4 +21,4 @@ serde_json.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-terminaste-core = { path = "../terminaste-core" }
+terminaste-core = { path = "../terminaste-core", version = "0.2.0" }

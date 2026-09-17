@@ -1,8 +1,8 @@
 cask "terminaste" do
-  version :latest
+  version "0.2.0"
   sha256 :no_check
 
-  url "https://github.com/Killusions/terminaste/releases/latest/download/terminaste-macos-arm64.tar.gz"
+  url "https://github.com/Killusions/terminaste/releases/download/v#{version}/terminaste-macos-arm64.tar.gz"
   name "terminaste"
   desc "Modern terminal with a visual IDE-style input, built native"
   homepage "https://github.com/Killusions/terminaste"

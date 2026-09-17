@@ -17,5 +17,5 @@ path = "src/main.rs"
 anyhow.workspace = true
 image.workspace = true
 serde_json.workspace = true
-terminaste-settings = { path = "../terminaste-settings", version = "0.1.0" }
+terminaste-settings = { path = "../terminaste-settings", version = "0.2.0" }
 toml.workspace = true

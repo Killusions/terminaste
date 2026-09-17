@@ -10,7 +10,7 @@ CHECKSUM="$ARCHIVE.sha256"
 sh "$ROOT_DIR/tools/build/macos"
 tar -czf "$ARCHIVE" -C "$ROOT_DIR/dist/terminaste-macos" \
   terminaste.app LICENSE README.md THIRD-PARTY-LICENSES.md dependency-manifest.json
-shasum -a 256 "$ARCHIVE" > "$CHECKSUM"
+(cd "$ROOT_DIR/dist" && shasum -a 256 "$(basename "$ARCHIVE")") > "$CHECKSUM"
 
 printf 'Packaged terminaste %s for macOS %s\n' "$VERSION" "$ARCH"
 printf '%s\n%s\n' "$ARCHIVE" "$CHECKSUM"
