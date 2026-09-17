@@ -91,6 +91,10 @@ impl TerminalPane {
         }
     }
     pub(super) fn request_shell_completions(&mut self, history: bool) {
+        self.completions.clear();
+        self.surface.completion_cursors.clear();
+        self.selected_completion = 0;
+        self.completion_navigating = false;
         if self.surface.query_bridge && !self.surface.input_bridge {
             self.surface.input_revision += 1;
             let cursor = self.editor.text()[..self.editor.cursor()].chars().count();

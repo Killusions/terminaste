@@ -154,6 +154,79 @@ impl Drop for ShellTest {
 }
 
 #[test]
+fn shell_bridges_stream_completion_and_history_batches() {
+    for program in ["/bin/zsh", "/bin/bash", "/opt/homebrew/bin/fish"] {
+        if !Path::new(program).exists() {
+            continue;
+        }
+        let mut shell = ShellTest::new(program);
+        for index in 0..45 {
+            std::fs::create_dir(shell.home.join(format!("stream-{index:02}"))).unwrap();
+        }
+        let ready = shell.event("ready");
+        shell.control_keys = ready["data"]["control_keys"] == true;
+        shell.query_only = ready["data"]["input_bridge"] != true;
+        let prompt = if shell.query_only {
+            "prompt-start"
+        } else {
+            "editor-ready"
+        };
+        shell.event(prompt);
+        if program == "/bin/zsh" {
+            shell.input("autoload -Uz compinit; compinit -D", 0, "\r");
+            shell.event("command-end");
+            shell.event(prompt);
+        }
+        shell.input("cd stream-", 1, "\x1b[97~");
+        let first = shell.event("completions");
+        assert_eq!(
+            first["data"]["items"].as_array().unwrap().len(),
+            8,
+            "{program}: {first}"
+        );
+        assert_eq!(first["data"]["append"], false);
+        assert_eq!(first["data"]["more"], true);
+        let mut count = 8;
+        loop {
+            let batch = shell.event("completions");
+            assert_eq!(batch["data"]["append"], true);
+            count += batch["data"]["items"].as_array().unwrap().len();
+            if batch["data"]["more"] == false {
+                break;
+            }
+        }
+        assert_eq!(count, 45, "{program}");
+        for index in 0..12 {
+            let text = format!("echo stream-{index:02}");
+            if shell.query_only {
+                shell.write(format!("{text}\r").as_bytes());
+            } else {
+                shell.input(&text, index + 2, "\r");
+            }
+            shell.event("command-end");
+            shell.event(prompt);
+        }
+        shell.input("echo stream-", 20, "\x1b[94~");
+        let first = shell.event("completions");
+        assert_eq!(
+            first["data"]["items"].as_array().unwrap().len(),
+            8,
+            "{program}: {first}"
+        );
+        assert_eq!(first["data"]["more"], true);
+        assert_eq!(first["data"]["items"][0]["text"], "echo stream-11");
+        let last = shell.event("completions");
+        assert_eq!(last["data"]["append"], true);
+        assert_eq!(last["data"]["more"], false);
+        assert_eq!(
+            last["data"]["items"].as_array().unwrap().len(),
+            4,
+            "{program}: {last}"
+        );
+    }
+}
+
+#[test]
 fn bash_and_fish_bridges_complete_directories_and_execute_exact_input() {
     for program in [
         "/bin/bash",

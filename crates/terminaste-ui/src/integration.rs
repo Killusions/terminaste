@@ -166,22 +166,39 @@ impl TerminalPane {
                     && envelope.data.get("text").and_then(|value| value.as_str())
                         == Some(self.editor.text())
                 {
-                    self.surface.completion_request = None;
+                    let more =
+                        envelope.data.get("more").and_then(|value| value.as_bool()) == Some(true);
+                    let append = envelope
+                        .data
+                        .get("append")
+                        .and_then(|value| value.as_bool())
+                        == Some(true);
+                    if !more {
+                        self.surface.completion_request = None;
+                    }
                     self.completion_revision = self.completion_revision.saturating_add(1);
                     if let Some(items) = envelope
                         .data
                         .get("items")
                         .and_then(|value| value.as_array())
                     {
-                        self.completions.clear();
-                        self.surface.completion_cursors.clear();
-                        let mut seen = std::collections::HashSet::new();
+                        if !append {
+                            self.completions.clear();
+                            self.surface.completion_cursors.clear();
+                            self.selected_completion = 0;
+                            self.completion_navigating = false;
+                        }
+                        let mut seen = self
+                            .completions
+                            .iter()
+                            .map(|item| item.replacement.clone())
+                            .collect::<std::collections::HashSet<_>>();
                         for item in items {
                             if let (Some(text), Some(cursor)) = (
                                 item.get("text").and_then(|value| value.as_str()),
                                 item.get("cursor").and_then(|value| value.as_u64()),
                             ) {
-                                if !seen.insert(text) {
+                                if !seen.insert(text.to_owned()) {
                                     continue;
                                 }
                                 self.completions.push(CompletionItem {
@@ -199,8 +216,6 @@ impl TerminalPane {
                                 self.surface.completion_cursors.push(cursor as usize);
                             }
                         }
-                        self.selected_completion = 0;
-                        self.completion_navigating = false;
                         if self.history_search.is_some() || self.ghost_history_request {
                             for item in self.completions.iter().rev() {
                                 self.history_suggestions
@@ -209,11 +224,11 @@ impl TerminalPane {
                             }
                             self.history_suggestions.truncate(1_000);
                         }
-                        if self.ghost_history_request {
+                        if self.ghost_history_request && (!self.completions.is_empty() || !more) {
                             self.dismiss_completions();
                             return;
                         }
-                        if self.completions.is_empty() && self.history_search.is_none() {
+                        if !more && self.completions.is_empty() && self.history_search.is_none() {
                             self.refresh_local_completions();
                         }
                     }

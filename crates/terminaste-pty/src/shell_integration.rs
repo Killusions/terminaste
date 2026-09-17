@@ -435,6 +435,7 @@ fn zsh_integration_script() -> &'static str {
 
   __terminaste_complete() {
     local original="$BUFFER" original_cursor=$CURSOR
+    local append=false
     local MENUSELECT MENUMODE
     local -i __terminaste_collecting=1 __terminaste_match_count=0 index
     local -a comppostfuncs=("${comppostfuncs[@]}" __terminaste_completion_state)
@@ -447,6 +448,9 @@ fn zsh_integration_script() -> &'static str {
         __terminaste_escape_json_value "$BUFFER"
         items+="$separator{\"text\":\"$REPLY\",\"cursor\":$CURSOR}"
         separator=','
+        if (( index == 8 || index % 32 == 0 )); then
+          __terminaste_emit_completion_batch true
+        fi
         zle .menu-complete -n 1
         [[ "$BUFFER" == "$first" ]] && break
       done
@@ -458,15 +462,20 @@ fn zsh_integration_script() -> &'static str {
       BUFFER="$original"
       CURSOR=$original_cursor
     fi
-    __terminaste_emit completions "\"revision\":$__TERMINASTE_INPUT_REVISION,\"text\":\"$(__terminaste_json_escape "$original")\",\"items\":[$items]"
+    __terminaste_emit_completion_batch false
     zle -R
+  }
+
+  __terminaste_emit_completion_batch() {
+    __terminaste_emit completions "\"revision\":$__TERMINASTE_INPUT_REVISION,\"text\":\"$(__terminaste_json_escape "$original")\",\"items\":[$items],\"append\":$append,\"more\":$1"
+    items='' separator='' append=true
   }
 
   zle -N __terminaste_complete
   __terminaste_history_options() {
     emulate -L zsh
     zmodload zsh/parameter
-    local original="$BUFFER" items='' separator='' entry text REPLY
+    local original="$BUFFER" items='' separator='' entry text REPLY append=false
     local prefix="$original"
     [[ "$prefix" == *$'\n'* ]] && prefix=''
     local -A seen
@@ -478,9 +487,13 @@ fn zsh_integration_script() -> &'static str {
       __terminaste_escape_json_value "$text"
       items+="$separator{\"text\":\"$REPLY\",\"cursor\":${#text}}"
       separator=','
-      (( ++count >= 2000 )) && break
+      (( ++count ))
+      if (( count == 8 || count % 32 == 0 )); then
+        __terminaste_emit_completion_batch true
+      fi
+      (( count >= 2000 )) && break
     done
-    __terminaste_emit completions "\"revision\":$__TERMINASTE_INPUT_REVISION,\"text\":\"$(__terminaste_json_escape "$original")\",\"items\":[$items]"
+    __terminaste_emit_completion_batch false
   }
   zle -N __terminaste_history_options
   __terminaste_history() {
@@ -636,22 +649,21 @@ if [[ -n "${TERMINASTE_SESSION:-}" && -z "${__TERMINASTE_INTEGRATION_LOADED:-}" 
 
   __terminaste_complete() {
     local original="$READLINE_LINE" before token command_name candidate escaped replacement REPLY
-    local -i original_point start cursor
-    local items='' separator='' suffix=''
+    local -i original_point start cursor count=0
+    local items='' separator='' suffix='' append=false kind
     before="$(LC_ALL=C; printf %s "${READLINE_LINE:0:READLINE_POINT}")"
     original_point=${#before}
     token="${before##*[[:space:]]}"
     start=$(( original_point - ${#token} ))
     command_name="${before%%[[:space:]]*}"
-    local -a candidates=()
     if [[ "$command_name" == cd ]]; then
-      while IFS= read -r candidate; do candidates+=("$candidate"); done < <(compgen -d -- "$token")
+      kind=-d
     elif (( start == 0 )); then
-      while IFS= read -r candidate; do candidates+=("$candidate"); done < <(compgen -c -- "$token")
+      kind=-c
     else
-      while IFS= read -r candidate; do candidates+=("$candidate"); done < <(compgen -f -- "$token")
+      kind=-f
     fi
-    for candidate in "${candidates[@]:0:200}"; do
+    while IFS= read -r candidate; do
       printf -v escaped '%q' "$candidate"
       suffix=''
       [[ -d "$candidate" ]] && suffix='/'
@@ -660,12 +672,22 @@ if [[ -n "${TERMINASTE_SESSION:-}" && -z "${__TERMINASTE_INTEGRATION_LOADED:-}" 
       REPLY="$(__terminaste_json_escape "$replacement")"
       items+="$separator{\"text\":\"$REPLY\",\"cursor\":$cursor}"
       separator=','
-    done
-    __terminaste_emit completions "\"revision\":$__TERMINASTE_INPUT_REVISION,\"text\":\"$(__terminaste_json_escape "$original")\",\"items\":[$items]"
+      (( ++count ))
+      if (( count == 8 || count % 32 == 0 )); then
+        __terminaste_emit_completion_batch true
+      fi
+      (( count >= 200 )) && break
+    done < <(compgen "$kind" -- "$token")
+    __terminaste_emit_completion_batch false
+  }
+
+  __terminaste_emit_completion_batch() {
+    __terminaste_emit completions "\"revision\":$__TERMINASTE_INPUT_REVISION,\"text\":\"$(__terminaste_json_escape "$original")\",\"items\":[$items],\"append\":$append,\"more\":$1"
+    items='' separator='' append=true
   }
 
   __terminaste_history_options() {
-    local original="$READLINE_LINE" line text REPLY items='' separator=''
+    local original="$READLINE_LINE" line text REPLY items='' separator='' append=false
     local -a entries=()
     local -i index count=0
     while IFS= read -r line; do entries+=("$line"); done < <(HISTTIMEFORMAT= builtin history)
@@ -677,9 +699,13 @@ if [[ -n "${TERMINASTE_SESSION:-}" && -z "${__TERMINASTE_INTEGRATION_LOADED:-}" 
       REPLY="$(__terminaste_json_escape "$text")"
       items+="$separator{\"text\":\"$REPLY\",\"cursor\":${#text}}"
       separator=','
-      (( ++count >= 2000 )) && break
+      (( ++count ))
+      if (( count == 8 || count % 32 == 0 )); then
+        __terminaste_emit_completion_batch true
+      fi
+      (( count >= 2000 )) && break
     done
-    __terminaste_emit completions "\"revision\":$__TERMINASTE_INPUT_REVISION,\"text\":\"$(__terminaste_json_escape "$original")\",\"items\":[$items]"
+    __terminaste_emit_completion_batch false
   }
 
   __terminaste_debug_trap() {

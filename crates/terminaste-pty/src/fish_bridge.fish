@@ -38,22 +38,38 @@ function __terminaste_complete
   set -l prefix (string sub --length $start -- "$original" | string collect --allow-empty)
   set -l suffix (string sub --start (math $cursor + 1) -- "$original" | string collect --allow-empty)
   set -l items
+  set -l append false
+  set -l batch_size 8
   for candidate in (complete --do-complete "$before")
     set -l text (string split --max 1 \t -- "$candidate")[1]
     set -l replacement "$prefix$text$suffix"
     set -l point (math $start + (string length -- "$text"))
     set -a items "{\"text\":\""(__terminaste_json_escape "$replacement")"\",\"cursor\":$point}"
+    if test (count $items) -ge $batch_size
+      __terminaste_emit completions "\"revision\":$__TERMINASTE_INPUT_REVISION,\"text\":\""(__terminaste_json_escape "$original")"\",\"items\":["(string join , -- $items)"],\"append\":$append,\"more\":true"
+      set items
+      set append true
+      set batch_size 32
+    end
   end
-  __terminaste_emit completions "\"revision\":$__TERMINASTE_INPUT_REVISION,\"text\":\""(__terminaste_json_escape "$original")"\",\"items\":["(string join , -- $items)"]"
+  __terminaste_emit completions "\"revision\":$__TERMINASTE_INPUT_REVISION,\"text\":\""(__terminaste_json_escape "$original")"\",\"items\":["(string join , -- $items)"],\"append\":$append,\"more\":false"
 end
 
 function __terminaste_history_options
   set -l original (commandline | string collect)
   set -l items
+  set -l append false
+  set -l batch_size 8
   for text in (history search --null --prefix --max 2000 -- "$original" | string split0)
     set -a items "{\"text\":\""(__terminaste_json_escape "$text")"\",\"cursor\":"(string length -- "$text")"}"
+    if test (count $items) -ge $batch_size
+      __terminaste_emit completions "\"revision\":$__TERMINASTE_INPUT_REVISION,\"text\":\""(__terminaste_json_escape "$original")"\",\"items\":["(string join , -- $items)"],\"append\":$append,\"more\":true"
+      set items
+      set append true
+      set batch_size 32
+    end
   end
-  __terminaste_emit completions "\"revision\":$__TERMINASTE_INPUT_REVISION,\"text\":\""(__terminaste_json_escape "$original")"\",\"items\":["(string join , -- $items)"]"
+  __terminaste_emit completions "\"revision\":$__TERMINASTE_INPUT_REVISION,\"text\":\""(__terminaste_json_escape "$original")"\",\"items\":["(string join , -- $items)"],\"append\":$append,\"more\":false"
 end
 
 function __terminaste_editor_ready --on-event fish_prompt

@@ -614,6 +614,9 @@ impl TerminalPane {
             return;
         }
         if self.surface.input_bridge || self.surface.query_bridge {
+            if self.ghost_history_request {
+                self.dismiss_completions();
+            }
             if self.surface.completion_request.is_none() && !self.surface.submit_pending {
                 self.request_shell_completions(false);
             }
@@ -642,6 +645,7 @@ impl TerminalPane {
     }
 
     fn show_history(&mut self) {
+        self.dismiss_completions();
         let prefix = if self.editor.text().contains('\n') {
             String::new()
         } else {
@@ -1026,6 +1030,37 @@ pub fn integration_frame_for_tests(name: &str, data_json: &str) -> Vec<u8> {
 #[cfg(test)]
 mod interaction_tests {
     use super::*;
+
+    #[test]
+    fn completion_batches_preserve_navigation_and_ignore_dismissed_results() {
+        let mut pane = TerminalPane::fake();
+        pane.surface.input_bridge = true;
+        pane.editor.set_text("no".to_owned());
+        pane.show_history();
+        let revision = pane.surface.input_revision;
+        let batch = |items: &[&str], append, more| {
+            integration_frame_for_tests("completions", &serde_json::json!({
+                "revision": revision, "text": "no", "append": append, "more": more,
+                "items": items.iter().map(|text| serde_json::json!({"text": text, "cursor": text.len()})).collect::<Vec<_>>()
+            }).to_string())
+        };
+        pane.process_ordered_pty_bytes(&batch(&["nosleep", "notify"], false, true));
+        assert_eq!(pane.completions.len(), 2);
+        assert_eq!(pane.surface.completion_request, Some(revision));
+        pane.move_completion(true);
+        pane.process_ordered_pty_bytes(&batch(&["notify", "nothing"], true, true));
+        assert_eq!(pane.completions.len(), 3);
+        assert_eq!(pane.surface.completion_cursors.len(), 3);
+        assert_eq!(pane.selected_completion, 1);
+        assert!(pane.completion_navigating);
+        pane.process_ordered_pty_bytes(&batch(&[], true, false));
+        assert!(pane.surface.completion_request.is_none());
+        assert_eq!(pane.completions.len(), 3);
+        pane.dismiss_completions();
+        pane.process_ordered_pty_bytes(&batch(&["not accepted"], true, false));
+        assert!(pane.completions.is_empty());
+        assert_eq!(pane.editor.text(), "no");
+    }
 
     #[test]
     fn typing_no_loads_shell_history_without_opening_completion_panel() {

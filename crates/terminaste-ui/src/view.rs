@@ -1008,6 +1008,8 @@ impl TerminalWindow {
         let block_count = pane.model.command_block_count();
         let focused_block = pane.block_focus.focused().map(|focus| focus.block_id);
         let completions = pane.completions.clone();
+        let loading_completions =
+            pane.surface.completion_request.is_some() && !pane.ghost_history_request;
         let selected = pane.selected_completion;
         let revision = pane.completion_revision;
         let pending_view = pane
@@ -1156,7 +1158,7 @@ impl TerminalWindow {
                     }),
                 )
                 .child(self.composer_canvas(id, prompt, active, cx));
-            if !completions.is_empty() {
+            if !completions.is_empty() || loading_completions {
                 let mut list = div()
                     .id(SharedString::from(format!("completions-{id}")))
                     .absolute()
@@ -1176,6 +1178,15 @@ impl TerminalWindow {
                     .shadow_md()
                     .py(px(3.))
                     .occlude();
+                if loading_completions {
+                    list = list.child(
+                        div()
+                            .px(px(8.))
+                            .h(px(24.))
+                            .text_color(theme.muted)
+                            .child("Loading…"),
+                    );
+                }
                 for (index, item) in completions.iter().enumerate().rev() {
                     list = list.child(
                         button(("completion", index), item.label.replace('\n', " "), theme)

@@ -40,11 +40,18 @@ Set-PSReadLineKeyHandler -Chord 'Ctrl+x,o' -ScriptBlock {
   $Cursor = 0
   [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref]$Line, [ref]$Cursor)
   $Completion = TabExpansion2 $Line $Cursor
-  $Items = @($Completion.CompletionMatches | ForEach-Object {
-    $Prefix = $Line.Substring(0, $Completion.ReplacementIndex) + $_.CompletionText
-    @{ text = $Prefix + $Line.Substring($Completion.ReplacementIndex + $Completion.ReplacementLength); cursor = (__TerminasteCharCount $Prefix) }
-  })
-  __TerminasteEmit 'completions' @{ text = $Line; revision = $global:__TerminasteInputRevision; items = $Items }
+  $Items = [Collections.Generic.List[object]]::new()
+  $Append = $false
+  foreach ($Match in $Completion.CompletionMatches) {
+    $Prefix = $Line.Substring(0, $Completion.ReplacementIndex) + $Match.CompletionText
+    $Items.Add(@{ text = $Prefix + $Line.Substring($Completion.ReplacementIndex + $Completion.ReplacementLength); cursor = (__TerminasteCharCount $Prefix) })
+    if ($Items.Count -ge $(if ($Append) { 32 } else { 8 })) {
+      __TerminasteEmit 'completions' @{ text = $Line; revision = $global:__TerminasteInputRevision; items = $Items.ToArray(); append = $Append; more = $true }
+      $Items.Clear()
+      $Append = $true
+    }
+  }
+  __TerminasteEmit 'completions' @{ text = $Line; revision = $global:__TerminasteInputRevision; items = $Items.ToArray(); append = $Append; more = $false }
 }
 
 Set-PSReadLineKeyHandler -Chord 'Ctrl+x,h' -ScriptBlock {
@@ -63,8 +70,20 @@ Set-PSReadLineKeyHandler -Chord 'Ctrl+x,h' -ScriptBlock {
   foreach ($Entry in Get-History) { $Entries.Add($Entry.CommandLine) }
   $Entries.Reverse()
   $Seen = [Collections.Generic.HashSet[string]]::new()
-  $Items = @($Entries | Where-Object { $_.StartsWith($Line, [StringComparison]::OrdinalIgnoreCase) -and $Seen.Add($_) } | Select-Object -First 2000 | ForEach-Object { @{ text = $_; cursor = (__TerminasteCharCount $_) } })
-  __TerminasteEmit 'completions' @{ text = $Line; revision = $global:__TerminasteInputRevision; items = $Items }
+  $Items = [Collections.Generic.List[object]]::new()
+  $Append = $false
+  $Count = 0
+  foreach ($Entry in $Entries) {
+    if (-not $Entry.StartsWith($Line, [StringComparison]::OrdinalIgnoreCase) -or -not $Seen.Add($Entry)) { continue }
+    $Items.Add(@{ text = $Entry; cursor = (__TerminasteCharCount $Entry) })
+    if ($Items.Count -ge $(if ($Append) { 32 } else { 8 })) {
+      __TerminasteEmit 'completions' @{ text = $Line; revision = $global:__TerminasteInputRevision; items = $Items.ToArray(); append = $Append; more = $true }
+      $Items.Clear()
+      $Append = $true
+    }
+    if (++$Count -ge 2000) { break }
+  }
+  __TerminasteEmit 'completions' @{ text = $Line; revision = $global:__TerminasteInputRevision; items = $Items.ToArray(); append = $Append; more = $false }
 }
 
 Set-PSReadLineKeyHandler -Chord 'Ctrl+x,p' -Function HistorySearchBackward
