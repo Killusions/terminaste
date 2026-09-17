@@ -550,7 +550,13 @@ impl TerminalWindow {
                     && !modifiers.alt
                     && !modifiers.platform
                 {
-                    if !pane.completions.is_empty() || pane.surface.completion_request.is_some() {
+                    if !pane.completions.is_empty() {
+                        pane.accept_completion();
+                        cx.stop_propagation();
+                        cx.notify();
+                        return;
+                    }
+                    if pane.surface.completion_request.is_some() {
                         pane.dismiss_completions();
                         pane.focus_input();
                         cx.stop_propagation();
@@ -1038,9 +1044,13 @@ impl TerminalWindow {
         let editor_columns = usize::from(cols)
             .saturating_sub(prompt.prefix.len() + prompt.suffix.len())
             .max(1);
-        let editor_rows = wrapped_rows(pane.editor.text(), editor_columns)
-            .len()
-            .min(6);
+        let preview = pane.completion_preview();
+        let editor_rows = wrapped_rows(
+            preview.as_deref().unwrap_or(pane.editor.text()),
+            editor_columns,
+        )
+        .len()
+        .min(6);
         let input_height = ((prompt.header.len() + editor_rows) as f32 * f32::from(cell.height)
             + 10.)
             .min(f32::from(available.height) * 0.5)
@@ -1356,41 +1366,28 @@ impl TerminalWindow {
                             .find(|pane| pane.id == id)
                             .is_some_and(|pane| pane.block_focus.focused().is_none());
                     if let Some(editor) = editor {
-                        let layout =
-                            paint_input(&editor, editor_bounds, &style, editor_focused, window, cx);
-                        if editor_focused {
-                            let columns =
-                                (editor_bounds.size.width / cell.width).floor().max(1.) as usize;
-                            let suggestion = view
-                                .read(cx)
-                                .app
-                                .active_terminal()
-                                .and_then(|pane| pane.history_suggestion(columns));
-                            if let Some(command) = suggestion {
-                                let suffix = &command[editor.text().len()..];
-                                let line = window.text_system().shape_line(
-                                    suffix.to_owned().into(),
-                                    font_size,
-                                    &[gpui::TextRun {
-                                        len: suffix.len(),
-                                        font: style.font.clone(),
-                                        color: theme.muted,
-                                        background_color: None,
-                                        underline: None,
-                                        strikethrough: None,
-                                    }],
-                                    Some(cell.width),
-                                );
-                                let _ = line.paint(
-                                    layout.point_for(editor.cursor),
-                                    cell.height,
-                                    gpui::TextAlign::Left,
-                                    None,
-                                    window,
-                                    cx,
-                                );
-                            }
-                        }
+                        let columns =
+                            (editor_bounds.size.width / cell.width).floor().max(1.) as usize;
+                        let preview = editor_focused
+                            .then(|| {
+                                view.read(cx).app.active_terminal().and_then(|pane| {
+                                    pane.completion_preview()
+                                        .or_else(|| pane.history_suggestion(columns))
+                                })
+                            })
+                            .flatten();
+                        let layout = paint_editor(
+                            &editor,
+                            editor_bounds,
+                            &style,
+                            InputDisplay {
+                                focused: editor_focused,
+                                preview: preview.as_deref(),
+                                ..Default::default()
+                            },
+                            window,
+                            cx,
+                        );
                         if editor_focused {
                             let focus = view.read(cx).focus.clone();
                             window.handle_input(

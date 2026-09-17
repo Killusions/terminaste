@@ -393,6 +393,7 @@ pub(super) fn paint_input(
         InputDisplay {
             focused,
             scroll_to: None,
+            preview: None,
         },
         window,
         cx,
@@ -400,20 +401,26 @@ pub(super) fn paint_input(
 }
 
 #[derive(Default)]
-pub(super) struct InputDisplay {
+pub(super) struct InputDisplay<'a> {
     pub focused: bool,
     pub scroll_to: Option<usize>,
+    pub preview: Option<&'a str>,
 }
 
 pub(super) fn paint_editor(
     editor: &CommandEditorState,
     bounds: Bounds<Pixels>,
     style: &super::theme::TerminalTextStyle,
-    display: InputDisplay,
+    display: InputDisplay<'_>,
     window: &mut Window,
     cx: &mut App,
 ) -> InputLayout {
     let focused = display.focused;
+    let text = display.preview.unwrap_or(editor.text());
+    let ghost_start = display
+        .preview
+        .map(|preview| preview_prefix(editor.text(), preview));
+    let cursor = ghost_start.map_or(editor.cursor, |start| editor.cursor.min(start));
     let super::theme::TerminalTextStyle {
         font,
         font_size,
@@ -421,13 +428,10 @@ pub(super) fn paint_editor(
         theme,
         drop_background_if_readable: _,
     } = style.clone();
-    let rows = wrapped_rows(
-        editor.text(),
-        (bounds.size.width / cell.width).floor() as usize,
-    );
+    let rows = wrapped_rows(text, (bounds.size.width / cell.width).floor() as usize);
     let cursor_row = rows
         .iter()
-        .rposition(|range| range.start <= display.scroll_to.unwrap_or(editor.cursor))
+        .rposition(|range| range.start <= display.scroll_to.unwrap_or(cursor))
         .unwrap_or(0);
     let visible = (bounds.size.height / cell.height).floor().max(1.0) as usize;
     let first = if focused || display.scroll_to.is_some() {
@@ -444,7 +448,7 @@ pub(super) fn paint_editor(
     for (row, range) in rows.iter().enumerate() {
         let origin =
             bounds.origin + gpui::point(gpui::px(0.), cell.height * (row as f32 - first as f32));
-        let text = &editor.text[range.clone()];
+        let text = &text[range.clone()];
         let mut x = origin.x;
         for (index, ch) in text.char_indices() {
             layout
@@ -468,17 +472,32 @@ pub(super) fn paint_editor(
                 ));
             }
         }
+        let normal_length = ghost_start.map_or(text.len(), |start| {
+            start.saturating_sub(range.start).min(text.len())
+        });
+        let text_run = |len, color| gpui::TextRun {
+            len,
+            font: font.clone(),
+            color,
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+        };
+        let runs = [
+            text_run(normal_length, theme.text),
+            text_run(text.len() - normal_length, theme.muted),
+        ];
+        let runs = if normal_length == text.len() {
+            &runs[..1]
+        } else if normal_length == 0 {
+            &runs[1..]
+        } else {
+            &runs[..]
+        };
         let line = window.text_system().shape_line(
             text.to_owned().into(),
             font_size,
-            &[gpui::TextRun {
-                len: text.len(),
-                font: font.clone(),
-                color: theme.text,
-                background_color: None,
-                underline: None,
-                strikethrough: None,
-            }],
+            runs,
             Some(cell.width),
         );
         let _ = line.paint(origin, cell.height, gpui::TextAlign::Left, None, window, cx);
@@ -501,11 +520,19 @@ pub(super) fn paint_editor(
     if focused {
         window.paint_quad(gpui::fill(
             Bounds::new(
-                layout.point_for(editor.cursor),
+                layout.point_for(cursor),
                 gpui::size(gpui::px(1.), cell.height),
             ),
             theme.text,
         ));
     }
     layout
+}
+
+pub(super) fn preview_prefix(text: &str, preview: &str) -> usize {
+    text.chars()
+        .zip(preview.chars())
+        .take_while(|(a, b)| a == b)
+        .map(|(ch, _)| ch.len_utf8())
+        .sum()
 }

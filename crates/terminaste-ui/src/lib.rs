@@ -723,6 +723,15 @@ impl TerminalPane {
             .cloned()
     }
 
+    fn completion_preview(&self) -> Option<String> {
+        if self.ghost_history_request || !self.editor.preedit.is_empty() {
+            return None;
+        }
+        self.completions
+            .get(self.selected_completion)
+            .map(|item| apply_completion(self.editor.text(), item))
+    }
+
     fn update_input(&mut self) {
         self.focus_input();
         self.ghost_dismissed = None;
@@ -1015,6 +1024,59 @@ pub fn integration_frame_for_tests(name: &str, data_json: &str) -> Vec<u8> {
 #[cfg(test)]
 mod interaction_tests {
     use super::*;
+
+    #[test]
+    fn selected_completion_previews_multiline_text_without_changing_input() {
+        let mut pane = TerminalPane::fake();
+        pane.editor.set_text("ec".to_owned());
+        pane.completions = ["echo one\necho two", "echo other"]
+            .into_iter()
+            .map(|command| CompletionItem {
+                label: command.to_owned(),
+                replacement: command.to_owned(),
+                description: String::new(),
+                kind: CompletionKind::Command,
+                range: 0..2,
+                score: 0,
+            })
+            .collect();
+        assert_eq!(
+            pane.completion_preview().as_deref(),
+            Some("echo one\necho two")
+        );
+        assert_eq!(pane.editor.text(), "ec");
+        pane.move_completion(true);
+        assert_eq!(pane.completion_preview().as_deref(), Some("echo other"));
+        pane.move_completion(false);
+        pane.accept_completion();
+        assert_eq!(pane.editor.text(), "echo one\necho two");
+        assert!(pane.completions.is_empty());
+        assert!(pane.active_command.is_none());
+        assert!(!pane.surface.submit_pending);
+    }
+
+    #[test]
+    fn ghost_preview_preserves_unicode_prefix_and_cancels_without_editing() {
+        assert_eq!(
+            editor::preview_prefix("echo 界", "echo 界\necho next"),
+            "echo 界".len()
+        );
+        assert_eq!(editor::preview_prefix("ecZZ", "echo done"), 2);
+        let mut pane = TerminalPane::fake();
+        pane.editor.set_text("ec".to_owned());
+        pane.completions = vec![CompletionItem {
+            label: "echo done".to_owned(),
+            replacement: "echo done".to_owned(),
+            description: String::new(),
+            kind: CompletionKind::Command,
+            range: 0..2,
+            score: 0,
+        }];
+        assert!(pane.completion_preview().is_some());
+        pane.dismiss_completions();
+        assert!(pane.completion_preview().is_none());
+        assert_eq!(pane.editor.text(), "ec");
+    }
 
     fn receive_completions(pane: &mut TerminalPane, text: &str, cursor: usize, more: bool) {
         let items = if text.is_empty() {
