@@ -130,6 +130,7 @@ struct PaneView {
     completions: ScrollHandle,
     completion_revision: u64,
     completion_index: usize,
+    completion_rows: usize,
     pending_command: bool,
     initialized: bool,
 }
@@ -143,6 +144,7 @@ impl Default for PaneView {
             completions: ScrollHandle::default(),
             completion_revision: 0,
             completion_index: 0,
+            completion_rows: 0,
             pending_command: false,
             initialized: false,
         }
@@ -1036,11 +1038,21 @@ impl TerminalWindow {
             state.initialized = true;
         }
         let completion_scroll = state.completions.clone();
+        let completion_rows = completions.len() + usize::from(loading_completions);
         if state.completion_revision != revision || state.completion_index != selected {
-            completion_scroll.scroll_to_item(completions.len().saturating_sub(selected + 1));
+            if state.completion_rows == 0 || state.completion_index != selected {
+                completion_scroll.scroll_to_item(completion_rows.saturating_sub(selected + 1));
+            } else if completion_scroll.offset().y + completion_scroll.max_offset().y >= px(-2.) {
+                completion_scroll.scroll_to_bottom();
+            } else {
+                let added_rows = completion_rows as f32 - state.completion_rows as f32;
+                completion_scroll
+                    .set_offset(completion_scroll.offset() - point(px(0.), px(24. * added_rows)));
+            }
             state.completion_revision = revision;
             state.completion_index = selected;
         }
+        state.completion_rows = completion_rows;
         let active =
             self.app.active_terminal().is_some_and(|pane| pane.id == id) && self.overlay.is_none();
         let find_query = self.find_query.clone();
@@ -1182,21 +1194,20 @@ impl TerminalWindow {
                     .occlude();
                 if loading_completions {
                     list = list.child(
-                        div()
-                            .px(px(8.))
-                            .h(px(24.))
+                        completion_row("completion-loading", "Loading…")
+                            .bg(theme.active_option.opacity(0.5))
                             .text_color(theme.muted)
-                            .child("Loading…"),
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(|_, _, _, cx| cx.stop_propagation()),
+                            ),
                     );
                 }
                 for (index, item) in completions.iter().enumerate().rev() {
                     list = list.child(
-                        button(("completion", index), item.label.replace('\n', " "), theme)
-                            .w_full()
-                            .h(px(24.))
-                            .justify_start()
-                            .px(px(8.))
-                            .text_ellipsis()
+                        completion_row(("completion", index), item.label.replace('\n', " "))
+                            .cursor_pointer()
+                            .hover(move |row| row.bg(theme.surface_high))
                             .when(index == selected, |row| {
                                 row.bg(theme.active_option).text_color(theme.text)
                             })
@@ -2121,6 +2132,23 @@ fn shortcut_matches(binding: &str, key: &str, modifiers: gpui::Modifiers) -> boo
         && parts.contains(&"ctrl") == modifiers.control
         && parts.contains(&"shift") == modifiers.shift
         && parts.contains(&"alt") == modifiers.alt
+}
+
+fn completion_row(
+    id: impl Into<gpui::ElementId>,
+    label: impl Into<SharedString>,
+) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(id)
+        .flex()
+        .items_center()
+        .justify_start()
+        .w_full()
+        .h(px(24.))
+        .px(px(8.))
+        .rounded(px(3.))
+        .text_ellipsis()
+        .child(label.into())
 }
 
 fn button(

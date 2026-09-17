@@ -1147,6 +1147,13 @@ mod interaction_tests {
         pane.move_completion(true);
         pane.process_ordered_pty_bytes(&batch(&["notify", "nothing"], true, true));
         assert_eq!(pane.completions.len(), 3);
+        assert_eq!(
+            pane.completions
+                .iter()
+                .map(|item| item.replacement.as_str())
+                .collect::<Vec<_>>(),
+            vec!["nosleep", "notify", "nothing"]
+        );
         assert_eq!(pane.surface.completion_cursors.len(), 3);
         assert_eq!(pane.selected_completion, 1);
         assert!(pane.completion_navigating);
