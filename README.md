@@ -59,7 +59,7 @@ Download `terminaste-macos-arm64.tar.gz` from the
 [latest release](https://github.com/Killusions/terminaste/releases/latest), unpack
 it, and move `terminaste.app` to `/Applications`.
 
-If macOS still blocks the app, remove quarantine from this app only:
+Since the app is not codesigned or notarized, remove quarantine from this app only:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/terminaste.app
