@@ -13,14 +13,16 @@ use terminaste_core::{
 use terminaste_settings::KeybindingAction as Action;
 
 use super::*;
-use editor::{paint_input, wrapped_rows, InputLayout};
+use editor::{paint_editor, paint_input, wrapped_rows, InputDisplay, InputLayout};
 use shell_prompt::PromptLayout;
 use terminal_surface::{paint_cells, terminal_key};
 use theme::TerminalTextStyle;
 
+mod find;
 #[cfg(test)]
 mod output_selection_tests;
 mod settings;
+use find::{FindMatch, FindOutput, FindPart};
 
 actions!(
     terminaste,
@@ -133,6 +135,7 @@ struct PaneView {
     completion_rows: usize,
     pending_command: bool,
     initialized: bool,
+    output_columns: usize,
 }
 
 impl Default for PaneView {
@@ -147,6 +150,7 @@ impl Default for PaneView {
             completion_rows: 0,
             pending_command: false,
             initialized: false,
+            output_columns: 0,
         }
     }
 }
@@ -164,6 +168,12 @@ pub struct TerminalWindow {
     selecting_input: bool,
     category: SettingsCategory,
     find_query: String,
+    find_matches: Vec<FindMatch>,
+    find_current: Option<usize>,
+    find_dirty: bool,
+    find_panes: Vec<Uuid>,
+    find_output_cache: HashMap<Uuid, FindOutput>,
+    find_ranges: HashMap<(Uuid, FindPart), std::ops::Range<usize>>,
     keybinding_search: String,
     palette_index: usize,
     pane_views: HashMap<Uuid, PaneView>,
@@ -218,6 +228,7 @@ impl TerminalWindow {
                             let bottom = scroll.history.offset().y + scroll.history.max_offset().y
                                 >= px(-2.);
                             if pane.drain_pty_events() {
+                                this.find_dirty = true;
                                 changed = true;
                                 if bottom {
                                     scroll.history.scroll_to_bottom();
@@ -267,6 +278,12 @@ impl TerminalWindow {
             selecting_input: false,
             category: SettingsCategory::Appearance,
             find_query: String::new(),
+            find_matches: Vec::new(),
+            find_current: None,
+            find_dirty: true,
+            find_panes: Vec::new(),
+            find_output_cache: HashMap::new(),
+            find_ranges: HashMap::new(),
             keybinding_search: String::new(),
             palette_index: 0,
             pane_views: HashMap::new(),
@@ -310,7 +327,11 @@ impl TerminalWindow {
         if let Some(field) = self.field {
             let text = self.field_editor.text().to_owned();
             match field {
-                Field::Find => self.find_query = text,
+                Field::Find => {
+                    self.find_query = text;
+                    self.find_current = None;
+                    self.find_dirty = true;
+                }
                 Field::FontFamily => self.app.loaded.settings.font.family = text,
                 Field::KeybindingSearch => self.keybinding_search = text,
                 Field::Redaction(index) => {
@@ -326,6 +347,7 @@ impl TerminalWindow {
         self.block_menu = None;
         self.field = None;
         if overlay == Overlay::Find {
+            self.find_dirty = true;
             self.edit_field(Field::Find, self.find_query.clone());
         }
     }
@@ -498,6 +520,20 @@ impl TerminalWindow {
     fn key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let key = event.keystroke.key.as_str();
         let modifiers = event.keystroke.modifiers;
+        let find_next = key == "g"
+            && if cfg!(target_os = "macos") {
+                modifiers.platform
+            } else {
+                modifiers.control
+            };
+        if (self.overlay == Some(Overlay::Find) && key == "enter")
+            || (find_next && self.find_current.is_some())
+        {
+            self.advance_find(modifiers.shift);
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
         if self.overlay.is_none() && !self.direct_input() {
             let columns = (self.input_layout.bounds.size.width / self.cell.width)
                 .floor()
@@ -1029,6 +1065,11 @@ impl TerminalWindow {
         let show_input = pane.active_command.is_none() || !pending_view;
         let status = pane.pty.is_none().then(|| pane.status.clone());
         let state = self.pane_views.entry(id).or_default();
+        let output_columns = ((available.width - px(24.)) / cell.width).floor().max(1.) as usize;
+        if state.output_columns != output_columns {
+            state.output_columns = output_columns;
+            self.find_dirty = true;
+        }
         if state.history_count != block_count {
             state.history_list.reset(block_count);
             state.history_count = block_count;
@@ -1055,7 +1096,6 @@ impl TerminalWindow {
         state.completion_rows = completion_rows;
         let active =
             self.app.active_terminal().is_some_and(|pane| pane.id == id) && self.overlay.is_none();
-        let find_query = self.find_query.clone();
         let zero_state_blocks = settings.appearance.zero_state_blocks;
         let block_gap =
             if settings.appearance.block_spacing == terminaste_settings::BlockSpacing::Compact {
@@ -1083,8 +1123,10 @@ impl TerminalWindow {
                         );
                     }
                 }
-                if !block_matches(&block_context_text(&block), &find_query)
-                    || (!zero_state_blocks && block.output.is_empty() && !block.running)
+                if !zero_state_blocks
+                    && block.output.is_empty()
+                    && !block.running
+                    && this.find_query.is_empty()
                 {
                     return div().h(px(0.)).into_any_element();
                 }
@@ -1448,13 +1490,25 @@ impl TerminalWindow {
                         canvas(
                             |_, _, _| (),
                             move |bounds, _, window, cx| {
-                                let layout = paint_input(
+                                let scroll_to = command_view
+                                    .read(cx)
+                                    .current_find_offset(id, FindPart::Command);
+                                let layout = paint_editor(
                                     &command_editor,
                                     bounds,
                                     &command_style,
-                                    false,
+                                    InputDisplay {
+                                        scroll_to,
+                                        ..Default::default()
+                                    },
                                     window,
                                     cx,
+                                );
+                                command_view.read(cx).paint_find_matches(
+                                    id,
+                                    FindPart::Command,
+                                    &layout,
+                                    window,
                                 );
                                 command_view.update(cx, |this, _| {
                                     this.command_layouts.insert(id, layout);
@@ -1528,11 +1582,7 @@ impl TerminalWindow {
             let output_text = block.output.clone();
             let columns = ((width - px(12.)) / self.cell.width).floor().max(1.) as usize;
             let output = shell_prompt::output_snapshot(&output_text, columns, 1_000);
-            let rows = output
-                .cells
-                .iter()
-                .rposition(|row| row.iter().any(|cell| !cell.text.trim().is_empty()))
-                .map_or(1, |row| row + 1);
+            let rows = output_rows(&output);
             let view = cx.entity();
             let cell = self.cell;
             let font = self.font.clone();
@@ -1595,6 +1645,12 @@ impl TerminalWindow {
                                     cx,
                                 );
                                 let layout = output_layout(&output, rows, content, cell);
+                                view.read(cx).paint_find_matches(
+                                    id,
+                                    FindPart::Output,
+                                    &layout.input,
+                                    window,
+                                );
                                 view.update(cx, |this, _| {
                                     if !this.selecting_command {
                                         if let Some((selected_id, editor)) =
@@ -2043,6 +2099,14 @@ struct OutputLayout {
     first_row: u64,
 }
 
+fn output_rows(snapshot: &TerminalSnapshot) -> usize {
+    snapshot
+        .cells
+        .iter()
+        .rposition(|row| row.iter().any(|cell| !cell.text.trim().is_empty()))
+        .map_or(1, |row| row + 1)
+}
+
 impl OutputLayout {
     fn update_selection(&self, previous: &Self, editor: &mut CommandEditorState) {
         if editor.text() == self.text {
@@ -2351,6 +2415,7 @@ impl Render for TerminalWindow {
                         .min_h_0()
                         .child(self.render_tree(&tree, workspace, window, cx)),
                 );
+        self.refresh_find();
         if self.overlay.is_none() && !self.focus.is_focused(window) {
             window.focus(&self.focus, cx);
         }

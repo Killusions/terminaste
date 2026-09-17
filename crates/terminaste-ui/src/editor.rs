@@ -386,6 +386,34 @@ pub(super) fn paint_input(
     window: &mut Window,
     cx: &mut App,
 ) -> InputLayout {
+    paint_editor(
+        editor,
+        bounds,
+        style,
+        InputDisplay {
+            focused,
+            scroll_to: None,
+        },
+        window,
+        cx,
+    )
+}
+
+#[derive(Default)]
+pub(super) struct InputDisplay {
+    pub focused: bool,
+    pub scroll_to: Option<usize>,
+}
+
+pub(super) fn paint_editor(
+    editor: &CommandEditorState,
+    bounds: Bounds<Pixels>,
+    style: &super::theme::TerminalTextStyle,
+    display: InputDisplay,
+    window: &mut Window,
+    cx: &mut App,
+) -> InputLayout {
+    let focused = display.focused;
     let super::theme::TerminalTextStyle {
         font,
         font_size,
@@ -399,10 +427,10 @@ pub(super) fn paint_input(
     );
     let cursor_row = rows
         .iter()
-        .rposition(|range| range.start <= editor.cursor)
+        .rposition(|range| range.start <= display.scroll_to.unwrap_or(editor.cursor))
         .unwrap_or(0);
     let visible = (bounds.size.height / cell.height).floor().max(1.0) as usize;
-    let first = if focused {
+    let first = if focused || display.scroll_to.is_some() {
         cursor_row.saturating_sub(visible - 1)
     } else {
         0

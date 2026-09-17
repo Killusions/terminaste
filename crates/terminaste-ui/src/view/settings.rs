@@ -506,7 +506,7 @@ impl TerminalWindow {
         let active = self.field == Some(field);
         let mut control = div()
             .id(id)
-            .h(px(28.))
+            .h((self.cell.height + px(10.)).max(px(28.)))
             .w_full()
             .min_w_0()
             .px(px(6.))
@@ -538,19 +538,18 @@ impl TerminalWindow {
         if active {
             let view = cx.entity();
             let editor = self.field_editor.clone();
+            let style = TerminalTextStyle {
+                font: self.font.clone(),
+                font_size: px(self.app.loaded.settings.font.size),
+                cell: self.cell,
+                theme,
+                drop_background_if_readable: false,
+            };
             control = control.child(
                 canvas(
                     |_, _, _| (),
                     move |bounds, _, window, cx| {
                         window.with_content_mask(Some(gpui::ContentMask { bounds }), |window| {
-                            let font = font(".SystemUIFont");
-                            let style = TerminalTextStyle {
-                                font,
-                                font_size: px(12.),
-                                cell: size(px(7.), px(18.)),
-                                theme,
-                                drop_background_if_readable: false,
-                            };
                             let layout = paint_input(&editor, bounds, &style, true, window, cx);
                             let focus = view.read(cx).focus.clone();
                             window.handle_input(
@@ -571,11 +570,7 @@ impl TerminalWindow {
     }
 
     pub(super) fn render_find(&self, cx: &mut Context<Self>) -> gpui::Stateful<gpui::Div> {
-        let matches = self.app.tabs[self.app.active_tab]
-            .panes
-            .iter()
-            .map(|pane| pane.match_count(&self.find_query))
-            .sum::<usize>();
+        let matches = self.find_matches.len();
         self.modal("find-modal", px(380.), cx)
             .p(px(8.))
             .flex()
@@ -604,12 +599,17 @@ impl TerminalWindow {
                     .justify_between()
                     .text_color(self.theme.muted)
                     .text_size(px(10.))
-                    .child(format!("{matches} matches"))
+                    .child(self.find_current.map_or_else(
+                        || format!("{matches} matches"),
+                        |index| format!("{} of {matches} matches", index + 1),
+                    ))
                     .child(
                         button("clear-find", "Clear", self.theme)
                             .px(px(6.))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.find_query.clear();
+                                this.find_current = None;
+                                this.find_dirty = true;
                                 this.field_editor.clear();
                                 cx.notify();
                             })),

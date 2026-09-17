@@ -936,19 +936,6 @@ impl TerminalPane {
             .find(|block| block.id == focused.block_id)
             .map(block_input_and_output)
     }
-    fn match_count(&self, query: &str) -> usize {
-        let query = query.trim().to_ascii_lowercase();
-        if query.is_empty() {
-            return 0;
-        }
-        let snapshot = self.model.snapshot();
-        snapshot
-            .blocks
-            .iter()
-            .map(|block| count_matches(&block_context_text(block), &query))
-            .sum::<usize>()
-            + count_matches(&snapshot.visible_lines.join("\n"), &query)
-    }
 }
 
 fn startup_directory(settings: &Settings) -> PathBuf {
@@ -991,26 +978,6 @@ fn block_matches(text: &str, query: &str) -> bool {
         || text
             .to_ascii_lowercase()
             .contains(&query.to_ascii_lowercase())
-}
-fn count_matches(text: &str, query: &str) -> usize {
-    if query.is_empty() {
-        return 0;
-    }
-    text.to_ascii_lowercase().match_indices(query).count()
-}
-fn block_context_text(block: &CommandBlock) -> String {
-    let mut text = format!("$ {}", block.command);
-    if let Some(code) = block.exit_code {
-        text.push_str(&format!("\nexit {code}"));
-    }
-    if let Some(duration) = block.duration_ms {
-        text.push_str(&format!("\nduration {}", format_duration(duration)));
-    }
-    if !block.output.is_empty() {
-        text.push('\n');
-        text.push_str(&block.output);
-    }
-    text
 }
 fn block_input_and_output(block: &CommandBlock) -> String {
     if block.output.is_empty() {
