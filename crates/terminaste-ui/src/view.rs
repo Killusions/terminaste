@@ -980,7 +980,8 @@ impl TerminalWindow {
         let cols = ((available.width - px(shell_chrome)) / cell.width)
             .floor()
             .max(1.) as u16;
-        let rows = ((available.height - px(inset * 2.)) / cell.height)
+        let bottom_inset = inset.min(4.);
+        let rows = ((available.height - px(inset + bottom_inset)) / cell.height)
             .floor()
             .max(1.) as u16;
         if (cols, rows) != (pane.cols, pane.rows) {
@@ -1052,14 +1053,14 @@ impl TerminalWindow {
             cx.processor(move |this, index, _window, cx| {
                 let Some(block) = this
                     .app
-                    .active_terminal()
+                    .pane_mut(id)
                     .and_then(|pane| pane.model.command_block(index))
                 else {
                     return div().h(px(0.)).into_any_element();
                 };
                 let mut block = block;
                 if block.running && block.output.is_empty() {
-                    if let Some(pane) = this.app.active_terminal() {
+                    if let Some(pane) = this.app.pane_mut(id) {
                         block.output = strip_running_command_echo(
                             &pane.model.running_command_output(),
                             &block.command,
@@ -1072,7 +1073,11 @@ impl TerminalWindow {
                     return div().h(px(0.)).into_any_element();
                 }
                 div()
-                    .pb(px(block_gap))
+                    .pb(px(if index + 1 == block_count && !show_input {
+                        0.
+                    } else {
+                        block_gap
+                    }))
                     .child(this.render_block(
                         id,
                         &block,
@@ -1718,12 +1723,16 @@ impl TerminalWindow {
                     |_, _, _| (),
                     move |bounds, _, window, cx| {
                         let padding = px(f32::from(settings.terminal.alternate_screen_padding));
+                        let bottom_padding = padding.min(px(4.));
+                        let height = ((bounds.size.height - padding - bottom_padding)
+                            / cell.height)
+                            .floor()
+                            .max(1.)
+                            * cell.height;
                         let content = Bounds::new(
-                            bounds.origin + point(padding, padding),
-                            size(
-                                (bounds.size.width - padding * 2.).max(cell.width),
-                                (bounds.size.height - padding * 2.).max(cell.height),
-                            ),
+                            bounds.origin
+                                + point(padding, bounds.size.height - bottom_padding - height),
+                            size((bounds.size.width - padding * 2.).max(cell.width), height),
                         );
                         let snapshot = view.update(cx, |this, _| {
                             let pane = this.app.pane_mut(id).unwrap();
