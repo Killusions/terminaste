@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+publish = false
 
 [[bin]]
 name = "terminaste"
@@ -12,5 +16,5 @@ path = "src/main.rs"
 [dependencies]
 gpui.workspace = true
 gpui_platform.workspace = true
-terminaste-settings = { path = "../terminaste-settings" }
-terminaste-ui = { path = "../terminaste-ui" }
+terminaste-settings = { path = "../terminaste-settings", version = "0.1.0" }
+terminaste-ui = { path = "../terminaste-ui", version = "0.1.0" }

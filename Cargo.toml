@@ -17,7 +17,11 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 authors = ["terminaste contributors"]
-repository = "https://example.invalid/terminaste"
+repository = "https://github.com/Killusions/terminaste"
+homepage = "https://github.com/Killusions/terminaste"
+readme = "README.md"
+keywords = ["terminal", "shell", "zsh", "macos"]
+categories = ["command-line-utilities", "development-tools"]
 
 [workspace.dependencies]
 anyhow = "1.0.98"

@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+publish = false
 
 [dependencies]
 gpui.workspace = true
@@ -13,9 +17,9 @@ crossbeam-channel.workspace = true
 directories.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-terminaste-completion = { path = "../terminaste-completion" }
-terminaste-core = { path = "../terminaste-core" }
-terminaste-pty = { path = "../terminaste-pty" }
-terminaste-settings = { path = "../terminaste-settings" }
+terminaste-completion = { path = "../terminaste-completion", version = "0.1.0" }
+terminaste-core = { path = "../terminaste-core", version = "0.1.0" }
+terminaste-pty = { path = "../terminaste-pty", version = "0.1.0" }
+terminaste-settings = { path = "../terminaste-settings", version = "0.1.0" }
 uuid.workspace = true
 unicode-width.workspace = true

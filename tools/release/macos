@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+set -eu
+
+ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+VERSION="$(cargo pkgid -p terminaste-app | sed 's/.*[#@]//')"
+ARCH="$(uname -m)"
+ARCHIVE="$ROOT_DIR/dist/terminaste-macos-$ARCH.tar.gz"
+CHECKSUM="$ARCHIVE.sha256"
+
+sh "$ROOT_DIR/tools/build/macos"
+tar -czf "$ARCHIVE" -C "$ROOT_DIR/dist/terminaste-macos" \
+  terminaste.app LICENSE README.md THIRD-PARTY-LICENSES.md dependency-manifest.json
+shasum -a 256 "$ARCHIVE" > "$CHECKSUM"
+
+printf 'Packaged terminaste %s for macOS %s\n' "$VERSION" "$ARCH"
+printf '%s\n%s\n' "$ARCHIVE" "$CHECKSUM"

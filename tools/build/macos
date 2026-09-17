@@ -21,21 +21,13 @@ cp "$ROOT_DIR/assets/dependency-manifest.json" "$DIST_DIR/dependency-manifest.js
 
 APP_DIR="$DIST_DIR/terminaste.app"
 CONTENTS="$APP_DIR/Contents"
-ICONSET="$DIST_DIR/terminaste.iconset"
 VERSION="$(cargo pkgid -p terminaste-app | sed 's/.*[#@]//')"
-mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources" "$ICONSET"
+mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
 cp "$BIN_PATH" "$CONTENTS/MacOS/terminaste"
 cp "$ROOT_DIR/LICENSE" "$ROOT_DIR/assets/THIRD-PARTY-LICENSES.md" "$CONTENTS/Resources/"
 cp "$ROOT_DIR/assets/settings.schema.json" "$CONTENTS/Resources/"
-for size in 16 32 128 256 512; do
-  cp "$ROOT_DIR/assets/icons/icon-$size.png" "$ICONSET/icon_${size}x${size}.png"
-  retina=$((size * 2))
-  if [ -f "$ROOT_DIR/assets/icons/icon-$retina.png" ]; then
-    cp "$ROOT_DIR/assets/icons/icon-$retina.png" "$ICONSET/icon_${size}x${size}@2x.png"
-  fi
-done
-iconutil -c icns "$ICONSET" -o "$CONTENTS/Resources/terminaste.icns"
-rm -rf "$ICONSET"
+sips -s format icns "$ROOT_DIR/assets/icon.png" \
+  --out "$CONTENTS/Resources/terminaste.icns" >/dev/null
 cat > "$CONTENTS/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      publish_crates:
+        description: Publish reusable crates to crates.io
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    if: github.event_name == 'push'
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: tools/check.sh
+      - run: tools/release/macos
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/terminaste-macos-arm64.tar.gz
+            dist/terminaste-macos-arm64.tar.gz.sha256
+          generate_release_notes: true
+
+  crates:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_crates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: tools/release/publish-crates --execute
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

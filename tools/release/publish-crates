@@ -1,0 +1,19 @@
+#!/usr/bin/env sh
+set -eu
+
+MODE="${1:---dry-run}"
+if [ "$MODE" != "--dry-run" ] && [ "$MODE" != "--execute" ]; then
+  printf 'usage: %s [--dry-run|--execute]\n' "$0" >&2
+  exit 2
+fi
+
+ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+cd "$ROOT_DIR"
+
+for crate in terminaste-core terminaste-completion terminaste-settings terminaste-pty; do
+  if [ "$MODE" = "--execute" ]; then
+    cargo publish --locked -p "$crate"
+  else
+    cargo publish --locked --dry-run -p "$crate"
+  fi
+done
