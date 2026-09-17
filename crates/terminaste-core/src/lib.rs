@@ -284,6 +284,7 @@ pub struct TerminalSnapshot {
     pub cursor_style: CursorStyle,
     pub visible_lines: Vec<String>,
     pub cells: Vec<Vec<TerminalCellSnapshot>>,
+    pub row_wrapped: Vec<bool>,
     pub blocks: Vec<CommandBlock>,
     pub selection: Option<TerminalSelection>,
     pub selection_ranges: Vec<TerminalRange>,
@@ -681,6 +682,7 @@ impl TerminalModel {
             cursor_style: self.cursor_style,
             visible_lines: self.visible_lines(),
             cells: self.cell_snapshots(),
+            row_wrapped: self.active_rows().iter().map(|row| row.wrapped).collect(),
             blocks: Vec::new(),
             selection: self.selection,
             selection_ranges: self.selection_ranges(),
@@ -714,10 +716,12 @@ impl TerminalModel {
         snapshot.visible_row_start -= offset as u64;
         snapshot.cursor_visible = false;
         snapshot.cells.clear();
+        snapshot.row_wrapped.clear();
         snapshot.visible_lines.clear();
         for row in snapshot.visible_row_start..snapshot.visible_row_start + self.rows as u64 {
             if let Some(row) = self.row_at(row) {
                 snapshot.visible_lines.push(row.text());
+                snapshot.row_wrapped.push(row.wrapped);
                 snapshot
                     .cells
                     .push(row.cells.iter().map(TerminalCellSnapshot::from).collect());

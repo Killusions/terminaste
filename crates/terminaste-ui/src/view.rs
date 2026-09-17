@@ -8,7 +8,7 @@ use gpui::{
 };
 use terminaste_core::{
     encode_focus_event, encode_key, encode_mouse_sgr, encode_mouse_wheel_sgr, KeyInput, Modifiers,
-    Osc52Policy, TerminalPoint,
+    Osc52Policy, TerminalCellWidth, TerminalPoint, TerminalSnapshot,
 };
 use terminaste_settings::KeybindingAction as Action;
 
@@ -18,6 +18,8 @@ use shell_prompt::PromptLayout;
 use terminal_surface::{paint_cells, terminal_key};
 use theme::TerminalTextStyle;
 
+#[cfg(test)]
+mod output_selection_tests;
 mod settings;
 
 actions!(
@@ -168,7 +170,7 @@ pub struct TerminalWindow {
     output_selection: Option<(Uuid, CommandEditorState)>,
     command_layouts: HashMap<Uuid, InputLayout>,
     selecting_command: bool,
-    output_layouts: HashMap<Uuid, InputLayout>,
+    output_layouts: HashMap<Uuid, OutputLayout>,
     selecting_output: bool,
     _task: gpui::Task<()>,
 }
@@ -1515,7 +1517,6 @@ impl TerminalWindow {
             let output_text = block.output.clone();
             let columns = ((width - px(12.)) / self.cell.width).floor().max(1.) as usize;
             let output = shell_prompt::output_snapshot(&output_text, columns, 1_000);
-            let plain_output = shell_prompt::plain_text(&output_text);
             let rows = output
                 .cells
                 .iter()
@@ -1549,18 +1550,9 @@ impl TerminalWindow {
                                 pane.block_focus.focus(TerminalBlockFocus { block_id: id });
                             }
                             if let Some(layout) = this.output_layouts.get(&id) {
-                                let index = layout.index_at(event.position);
-                                let text = this
-                                    .app
-                                    .tabs
-                                    .iter()
-                                    .flat_map(|tab| &tab.panes)
-                                    .flat_map(|pane| pane.model.command_blocks())
-                                    .find(|block| block.id == id)
-                                    .map(|block| shell_prompt::plain_text(&block.output))
-                                    .unwrap_or_default();
+                                let index = layout.input.index_at(event.position);
                                 let mut editor = CommandEditorState::new();
-                                editor.set_text(text);
+                                editor.set_text(layout.text.clone());
                                 if event.click_count >= 3 {
                                     editor.select_line_at(index);
                                 } else if event.click_count == 2 {
@@ -1591,14 +1583,28 @@ impl TerminalWindow {
                                     window,
                                     cx,
                                 );
-                                let layout = output_layout(&plain_output, content, cell);
+                                let layout = output_layout(&output, rows, content, cell);
+                                view.update(cx, |this, _| {
+                                    if !this.selecting_command {
+                                        if let Some((selected_id, editor)) =
+                                            &mut this.output_selection
+                                        {
+                                            if *selected_id == id {
+                                                if let Some(previous) = this.output_layouts.get(&id)
+                                                {
+                                                    layout.update_selection(previous, editor);
+                                                }
+                                            }
+                                        }
+                                    }
+                                });
                                 if !view.read(cx).selecting_command {
                                     if let Some((selected_id, editor)) =
                                         &view.read(cx).output_selection
                                     {
                                         if *selected_id == id {
                                             if let Some(range) = editor.selection_range() {
-                                                for pair in layout.positions.windows(2) {
+                                                for pair in layout.input.positions.windows(2) {
                                                     let (index, origin) = pair[0];
                                                     let (_, next) = pair[1];
                                                     if range.contains(&index)
@@ -2020,26 +2026,89 @@ fn strip_running_command_echo(output: &str, command: &str) -> String {
     output.to_owned()
 }
 
-fn output_layout(text: &str, bounds: Bounds<Pixels>, cell: Size<Pixels>) -> InputLayout {
-    let rows = wrapped_rows(
-        text,
-        (bounds.size.width / cell.width).floor().max(1.) as usize,
-    );
-    let mut positions = Vec::new();
-    for (row, range) in rows.iter().enumerate() {
-        let origin = bounds.origin + point(px(0.), cell.height * row as f32);
-        let mut x = origin.x;
-        for (index, character) in text[range.clone()].char_indices() {
-            positions.push((range.start + index, point(x, origin.y)));
-            x += cell.width * unicode_width::UnicodeWidthChar::width(character).unwrap_or(0) as f32;
+struct OutputLayout {
+    input: InputLayout,
+    text: String,
+    first_row: u64,
+}
+
+impl OutputLayout {
+    fn update_selection(&self, previous: &Self, editor: &mut CommandEditorState) {
+        if editor.text() == self.text {
+            return;
         }
-        positions.push((range.end, point(x, origin.y)));
+        let remap = |index| {
+            let position = previous.input.point_for(index);
+            let row = ((position.y - previous.input.bounds.origin.y) / previous.input.line_height)
+                .round()
+                + previous.first_row as f32
+                - self.first_row as f32;
+            self.input.index_at(
+                self.input.bounds.origin
+                    + point(
+                        (position.x - previous.input.bounds.origin.x) / previous.input.cell_width
+                            * self.input.cell_width,
+                        (row + 0.5) * self.input.line_height,
+                    ),
+            )
+        };
+        let cursor = remap(editor.cursor);
+        let anchor = editor.selection_anchor.map(remap);
+        editor.set_text(self.text.clone());
+        editor.cursor = cursor;
+        editor.selection_anchor = anchor;
     }
-    InputLayout {
-        bounds,
-        positions,
-        line_height: cell.height,
-        cell_width: cell.width,
+}
+
+fn output_layout(
+    snapshot: &TerminalSnapshot,
+    rows: usize,
+    bounds: Bounds<Pixels>,
+    cell: Size<Pixels>,
+) -> OutputLayout {
+    let mut text = String::new();
+    let mut positions = Vec::new();
+    for (row, cells) in snapshot.cells.iter().take(rows).enumerate() {
+        let origin = bounds.origin + point(px(0.), cell.height * row as f32);
+        let end = if snapshot.row_wrapped[row] {
+            cells.len()
+        } else {
+            cells
+                .iter()
+                .rposition(|cell| !cell.text.trim().is_empty())
+                .map_or(0, |col| col + 1)
+        };
+        let mut end_col = 0;
+        for (col, terminal_cell) in cells.iter().take(end).enumerate() {
+            if terminal_cell.width == TerminalCellWidth::Spacer {
+                continue;
+            }
+            positions.push((text.len(), origin + point(cell.width * col as f32, px(0.))));
+            text.push_str(&terminal_cell.text);
+            end_col = col
+                + if terminal_cell.width == TerminalCellWidth::Wide {
+                    2
+                } else {
+                    1
+                };
+        }
+        positions.push((
+            text.len(),
+            origin + point(cell.width * end_col as f32, px(0.)),
+        ));
+        if row + 1 < rows && !snapshot.row_wrapped[row] {
+            text.push('\n');
+        }
+    }
+    OutputLayout {
+        input: InputLayout {
+            bounds,
+            positions,
+            line_height: cell.height,
+            cell_width: cell.width,
+        },
+        text,
+        first_row: snapshot.visible_row_start,
     }
 }
 
@@ -2214,12 +2283,12 @@ impl Render for TerminalWindow {
                     }
                     if this.selecting_output {
                         if let Some((id, editor)) = &mut this.output_selection {
-                            let layouts = if this.selecting_command {
-                                &this.command_layouts
+                            let layout = if this.selecting_command {
+                                this.command_layouts.get(id)
                             } else {
-                                &this.output_layouts
+                                this.output_layouts.get(id).map(|layout| &layout.input)
                             };
-                            if let Some(layout) = layouts.get(id) {
+                            if let Some(layout) = layout {
                                 editor.move_cursor(layout.index_at(event.position), true);
                                 cx.notify();
                             }
