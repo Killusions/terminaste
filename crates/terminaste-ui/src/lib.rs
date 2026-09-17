@@ -402,6 +402,7 @@ struct TerminalPane {
     editor_has_focus: bool,
     completion_revision: u64,
     completions: Vec<CompletionItem>,
+    completion_cache: [Option<CachedCompletions>; 2],
     selected_completion: usize,
     completion_navigating: bool,
     history_offset: usize,
@@ -426,6 +427,21 @@ struct TerminalPane {
     block_focus: BlockFocusState,
     scroll_focused_block: bool,
     surface: terminal_surface::SurfaceState,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+struct CompletionContext {
+    text: String,
+    cursor: usize,
+    cwd: PathBuf,
+    shell_id: Option<String>,
+    history: bool,
+}
+
+struct CachedCompletions {
+    context: CompletionContext,
+    items: Vec<CompletionItem>,
+    cursors: Vec<usize>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -511,6 +527,7 @@ impl TerminalPane {
             editor_has_focus: false,
             completion_revision: 0,
             completions: Vec::new(),
+            completion_cache: [None, None],
             selected_completion: 0,
             completion_navigating: false,
             history_offset: 0,
@@ -787,6 +804,7 @@ impl TerminalPane {
         self.completions.clear();
         self.surface.completion_cursors.clear();
         self.surface.completion_request = None;
+        self.surface.completion_context = None;
         self.completion_navigating = false;
     }
 
@@ -1030,6 +1048,85 @@ pub fn integration_frame_for_tests(name: &str, data_json: &str) -> Vec<u8> {
 #[cfg(test)]
 mod interaction_tests {
     use super::*;
+
+    fn receive_completions(pane: &mut TerminalPane, text: &str, cursor: usize, more: bool) {
+        let items = if text.is_empty() {
+            Vec::new()
+        } else {
+            vec![serde_json::json!({"text": text, "cursor": cursor})]
+        };
+        pane.process_ordered_pty_bytes(&integration_frame_for_tests(
+            "completions",
+            &serde_json::json!({
+                "revision": pane.surface.input_revision, "text": pane.editor.text(),
+                "items": items, "more": more, "append": false
+            })
+            .to_string(),
+        ));
+    }
+
+    #[test]
+    fn reopening_panels_uses_cached_results_until_the_first_fresh_batch() {
+        let mut pane = TerminalPane::fake();
+        pane.surface.input_bridge = true;
+        pane.editor.set_text("no".to_owned());
+        for history in [false, true] {
+            pane.request_shell_completions(history);
+            receive_completions(&mut pane, "nosleep", 4, false);
+            pane.dismiss_completions();
+            assert!(pane.completions.is_empty());
+            pane.request_shell_completions(history);
+            assert_eq!(pane.completions[0].replacement, "nosleep");
+            assert_eq!(pane.surface.completion_cursors, vec![4]);
+            assert!(pane.surface.completion_request.is_some());
+            receive_completions(&mut pane, "notify", 6, true);
+            assert_eq!(pane.completions.len(), 1);
+            assert_eq!(pane.completions[0].replacement, "notify");
+            pane.dismiss_completions();
+            pane.request_shell_completions(history);
+            assert_eq!(pane.completions[0].replacement, "notify");
+            pane.surface.isolated_shell = true;
+            receive_completions(&mut pane, "", 0, false);
+            assert!(pane.completions.is_empty());
+            pane.dismiss_completions();
+        }
+    }
+
+    #[test]
+    fn cached_results_are_separate_for_history_and_completion_contexts() {
+        let mut pane = TerminalPane::fake();
+        pane.surface.input_bridge = true;
+        pane.editor.set_text("no".to_owned());
+        pane.request_shell_completions(false);
+        receive_completions(&mut pane, "notify", 6, false);
+        pane.dismiss_completions();
+        pane.show_history();
+        assert!(pane.completions.is_empty());
+        receive_completions(&mut pane, "nosleep", 7, false);
+        pane.dismiss_completions();
+        pane.refresh_completions();
+        assert_eq!(pane.completions[0].replacement, "notify");
+        pane.dismiss_completions();
+        pane.show_history();
+        assert_eq!(pane.completions[0].replacement, "nosleep");
+        pane.dismiss_completions();
+
+        pane.editor.set_text("not".to_owned());
+        pane.request_shell_completions(false);
+        assert!(pane.completions.is_empty());
+        pane.editor.set_text("no".to_owned());
+        pane.editor.cursor = 1;
+        pane.request_shell_completions(false);
+        assert!(pane.completions.is_empty());
+        pane.editor.cursor = 2;
+        pane.cwd = PathBuf::from("another-directory");
+        pane.request_shell_completions(false);
+        assert!(pane.completions.is_empty());
+        pane.cwd = PathBuf::from(".");
+        pane.surface.shell_id = Some("another-shell".to_owned());
+        pane.request_shell_completions(false);
+        assert!(pane.completions.is_empty());
+    }
 
     #[test]
     fn completion_batches_preserve_navigation_and_ignore_dismissed_results() {

@@ -20,6 +20,7 @@ pub(super) struct SurfaceState {
     pub isolated_shell: bool,
     pub input_revision: u64,
     pub completion_request: Option<u64>,
+    pub completion_context: Option<CompletionContext>,
     pub completion_cursors: Vec<usize>,
     pub submit_pending: bool,
     pub prompt_ansi: Option<String>,
@@ -91,8 +92,26 @@ impl TerminalPane {
         }
     }
     pub(super) fn request_shell_completions(&mut self, history: bool) {
+        let context = CompletionContext {
+            text: self.editor.text().to_owned(),
+            cursor: self.editor.cursor(),
+            cwd: self.cwd.clone(),
+            shell_id: self.surface.shell_id.clone(),
+            history,
+        };
         self.completions.clear();
         self.surface.completion_cursors.clear();
+        if !self.ghost_history_request {
+            if let Some(cached) = self.completion_cache[usize::from(history)]
+                .as_ref()
+                .filter(|cached| cached.context == context)
+            {
+                self.completions.clone_from(&cached.items);
+                self.surface.completion_cursors.clone_from(&cached.cursors);
+            }
+        }
+        self.surface.completion_context = Some(context);
+        self.completion_revision = self.completion_revision.saturating_add(1);
         self.selected_completion = 0;
         self.completion_navigating = false;
         if self.surface.query_bridge && !self.surface.input_bridge {

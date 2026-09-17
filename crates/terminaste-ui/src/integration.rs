@@ -231,6 +231,16 @@ impl TerminalPane {
                         if !more && self.completions.is_empty() && self.history_search.is_none() {
                             self.refresh_local_completions();
                         }
+                        if !self.ghost_history_request {
+                            if let Some(context) = &self.surface.completion_context {
+                                self.completion_cache[usize::from(context.history)] =
+                                    Some(CachedCompletions {
+                                        context: context.clone(),
+                                        items: self.completions.clone(),
+                                        cursors: self.surface.completion_cursors.clone(),
+                                    });
+                            }
+                        }
                     }
                 }
             }
