@@ -2082,7 +2082,7 @@ fn strip_running_command_echo(output: &str, command: &str) -> String {
     let output = output.trim_start_matches(['\r', '\n']);
     let first_line_end = output.find('\n').unwrap_or(output.len());
     let first_line = &output[..first_line_end];
-    if first_line.contains(command) {
+    if shell_prompt::plain_text(first_line).contains(command) {
         return output[first_line_end..]
             .trim_start_matches(['\r', '\n'])
             .to_owned();

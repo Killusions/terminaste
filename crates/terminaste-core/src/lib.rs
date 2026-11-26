@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::VecDeque;
+use std::fmt::Write;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -130,6 +131,63 @@ pub struct CommandBlock {
     pub exit_code: Option<i32>,
     pub duration_ms: Option<u64>,
     pub running: bool,
+}
+
+#[derive(Debug, Clone, Default)]
+struct CommandOutput {
+    text: String,
+    trimmed_len: usize,
+    text_len: usize,
+    style: CellStyle,
+}
+
+impl CommandOutput {
+    fn clear(&mut self) {
+        self.text.clear();
+        self.trimmed_len = 0;
+        self.text_len = 0;
+        self.style = CellStyle::default();
+    }
+
+    fn trimmed(&self) -> &str {
+        &self.text[..self.trimmed_len]
+    }
+
+    fn push_str(&mut self, text: &str) {
+        let trimmed = text.trim_end();
+        if !trimmed.is_empty() {
+            self.trimmed_len = self.text.len() + trimmed.len();
+        }
+        self.text.push_str(text);
+        self.text_len += text.len();
+    }
+
+    fn push_styled(&mut self, text: &str, style: CellStyle) {
+        if style != self.style || (self.text.ends_with('\n') && style != CellStyle::default()) {
+            self.style = style;
+            self.text.push_str("\x1b[0");
+            for (enabled, code) in [
+                (style.bold, ";1"),
+                (style.dim, ";2"),
+                (style.italic, ";3"),
+                (style.underline, ";4"),
+                (style.inverse, ";7"),
+                (style.hidden, ";8"),
+                (style.strikethrough, ";9"),
+            ] {
+                if enabled {
+                    self.text.push_str(code);
+                }
+            }
+            for (color, code) in [(style.foreground, 38), (style.background, 48)] {
+                if let Some(Rgb(r, g, b)) = color {
+                    let _ = write!(self.text, ";{code};2;{r};{g};{b}");
+                }
+            }
+            self.text.push('m');
+        }
+        self.push_str(text);
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -314,7 +372,7 @@ pub struct TerminalModel {
     osc52_policy: Osc52Policy,
     blocks: Vec<CommandBlock>,
     command_buffer: String,
-    pending_output: String,
+    pending_output: CommandOutput,
     dynamic_command_output: bool,
     pending_carriage_return: bool,
     command_started_at: Option<Instant>,
@@ -350,7 +408,7 @@ impl TerminalModel {
             osc52_policy: Osc52Policy::Deny,
             blocks: Vec::new(),
             command_buffer: String::new(),
-            pending_output: String::new(),
+            pending_output: CommandOutput::default(),
             dynamic_command_output: false,
             pending_carriage_return: false,
             command_started_at: None,
@@ -506,27 +564,15 @@ impl TerminalModel {
             return;
         };
         if self.dynamic_command_output && !self.modes.alternate_screen {
-            let start = self.blocks[index].started_row.max(self.discarded_rows);
-            let end = self.visible_row_start() + self.rows as u64;
-            let mut output = String::new();
-            for row in (start..end).filter_map(|row| self.row_at(row)) {
-                if row.wrapped {
-                    for cell in row.cells.iter().filter(|cell| !cell.spacer) {
-                        output.push_str(&cell.text);
-                    }
-                } else {
-                    output.push_str(&row.text());
-                    output.push('\n');
-                }
-            }
-            self.pending_output = output;
+            self.pending_output = self.command_output_from_grid(self.blocks[index].started_row);
         }
         let block = &mut self.blocks[index];
         block.exit_code = Some(exit_code);
         block.running = false;
-        if !self.pending_output.is_empty() && command.is_none_or(|command| block.command == command)
+        if !self.pending_output.trimmed().is_empty()
+            && command.is_none_or(|command| block.command == command)
         {
-            block.output = self.pending_output.trim_end().to_owned();
+            block.output = self.pending_output.trimmed().to_owned();
             self.pending_output.clear();
         }
         block.duration_ms = self.command_started_at.map(|start| millis(start.elapsed()));
@@ -566,7 +612,7 @@ impl TerminalModel {
             return false;
         };
         self.pending_output.push_str(text);
-        block.output = self.pending_output.trim_end().to_owned();
+        block.output = self.pending_output.trimmed().to_owned();
         true
     }
 
@@ -634,7 +680,7 @@ impl TerminalModel {
     pub fn command_blocks(&self) -> Vec<CommandBlock> {
         let mut blocks = self.blocks.clone();
         if let Some(block) = blocks.iter_mut().rev().find(|block| block.running) {
-            block.output = self.pending_output.trim_end().to_owned();
+            block.output = self.pending_output.trimmed().to_owned();
         }
         blocks
     }
@@ -646,7 +692,7 @@ impl TerminalModel {
     pub fn command_block(&self, index: usize) -> Option<CommandBlock> {
         let mut block = self.blocks.get(index)?.clone();
         if block.running {
-            block.output = self.pending_output.trim_end().to_owned();
+            block.output = self.pending_output.trimmed().to_owned();
         }
         Some(block)
     }
@@ -655,20 +701,32 @@ impl TerminalModel {
         let Some(block) = self.blocks.iter().rev().find(|block| block.running) else {
             return String::new();
         };
-        let start = block.started_row.max(self.discarded_rows);
+        self.command_output_from_grid(block.started_row)
+            .trimmed()
+            .to_owned()
+    }
+
+    fn command_output_from_grid(&self, started_row: u64) -> CommandOutput {
+        let start = started_row.max(self.discarded_rows);
         let end = self.visible_row_start() + self.rows as u64;
-        let mut output = String::new();
+        let mut output = CommandOutput::default();
         for row in (start..end).filter_map(|row| self.row_at(row)) {
-            if row.wrapped {
-                for cell in row.cells.iter().filter(|cell| !cell.spacer) {
-                    output.push_str(&cell.text);
-                }
+            let len = if row.wrapped {
+                row.cells.len()
             } else {
-                output.push_str(&row.text());
-                output.push('\n');
+                row.cells
+                    .iter()
+                    .rposition(|cell| !cell.text.trim_end().is_empty())
+                    .map_or(0, |index| index + 1)
+            };
+            for cell in row.cells[..len].iter().filter(|cell| !cell.spacer) {
+                output.push_styled(&cell.text, cell.style);
+            }
+            if !row.wrapped {
+                output.push_str("\n");
             }
         }
-        output.trim_end().to_owned()
+        output
     }
 
     pub fn screen_snapshot(&self) -> TerminalSnapshot {
@@ -1433,13 +1491,18 @@ impl TerminalModel {
         if !self.modes.alternate_screen
             && !self.dynamic_command_output
             && self.command_started_at.is_some()
-            && self.pending_output.len()
+            && self.pending_output.text_len
                 < self
                     .max_history_rows
                     .saturating_mul(self.cols)
                     .saturating_mul(4)
         {
-            self.pending_output.push(ch);
+            if ch == '\n' {
+                self.pending_output.push_str("\n");
+            } else {
+                self.pending_output
+                    .push_styled(ch.encode_utf8(&mut [0; 4]), self.style);
+            }
         }
     }
 

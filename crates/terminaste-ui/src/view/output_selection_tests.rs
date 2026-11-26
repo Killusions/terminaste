@@ -37,6 +37,34 @@ fn selection_uses_rendered_cells_for_tabs_unicode_and_cursor_movements() {
 }
 
 #[test]
+fn command_cards_preserve_colors_during_and_after_execution() {
+    let mut terminal = terminaste_core::TerminalModel::new(40, 5, 100);
+    terminal.start_integrated_command("terraform apply".to_owned());
+    terminal.process_bytes(b"\x1b[32m+ create\x1b[0m\r\n\x1b[1;36mPlan\x1b[0m: 1 to add");
+    let check_output = |output: &str| {
+        let snapshot = shell_prompt::output_snapshot(output, 40, 5);
+        assert_eq!(snapshot.visible_lines[..2], ["+ create", "Plan: 1 to add"]);
+        assert_eq!(
+            snapshot.cells[0][0].style.foreground,
+            Some(terminaste_core::Rgb(34, 197, 94))
+        );
+        assert!(snapshot.cells[1][0].style.bold);
+        assert_eq!(
+            snapshot.cells[1][4].style,
+            terminaste_core::CellStyle::default()
+        );
+        assert_eq!(shell_prompt::plain_text(output), "+ create\nPlan: 1 to add");
+    };
+    check_output(&terminal.command_block(0).unwrap().output);
+
+    terminal.process_bytes(b"\r\x1b[2K\x1b[1;36mPlan\x1b[0m: 1 to add\r\n");
+    check_output(&terminal.running_command_output());
+
+    terminal.finish_running_command(0);
+    check_output(&terminal.command_block(0).unwrap().output);
+}
+
+#[test]
 fn soft_wrapping_does_not_insert_newlines_into_copied_text() {
     let layout = layout("abcdefghij界next", 10, 5);
     assert_eq!(layout.text, "abcdefghij界next");
