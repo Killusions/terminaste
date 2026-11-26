@@ -35,6 +35,13 @@ __terminaste_ssh_interactive() {
   return 1
 }
 
+__terminaste_ssh_terminal() {
+  [ -t 0 ] && [ -t 1 ] || return 0
+  local payload
+  payload=$(printf '{"session":"%s","sequence":0,"data":%s}' "$TERMINASTE_SESSION" "$1" | base64 | tr -d '=\r\n' | tr '/+' '_-')
+  printf '\033[?25h\033Pterminaste;1;ssh-terminal;json64;%s\033\\' "$payload"
+}
+
 ssh() {
   if [ -z "${TERMINASTE_BOOTSTRAP:-}" ] || ! __terminaste_ssh_interactive "$@"; then
     command ssh "$@"
@@ -49,9 +56,12 @@ ssh() {
   case "$config" in
     *'requesttty false'*) command ssh "$@"; return ;;
   esac
-  local __terminaste_body __terminaste_command
+  local __terminaste_body __terminaste_command result=0
   __terminaste_launch_command
-  command ssh -t "$@" "$__terminaste_command"
+  __terminaste_ssh_terminal true
+  command ssh -t "$@" "$__terminaste_command" || result=$?
+  __terminaste_ssh_terminal false
+  return "$result"
 }
 
 __terminaste_sudo_shell() {

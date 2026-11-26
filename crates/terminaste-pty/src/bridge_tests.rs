@@ -351,6 +351,11 @@ fn elevated_and_remote_shells_bootstrap_and_return_to_the_parent() {
     {
         shell.input(command, 2 + index as u64, "\r");
         shell.event("command-start");
+        if command.starts_with("ssh ") {
+            let frame = shell.event("ssh-terminal");
+            assert_eq!(frame["session"], shell.session.id.to_string());
+            assert_eq!(frame["data"], true);
+        }
         let child = shell.event("ready");
         assert_ne!(child["shell_id"], parent);
         assert_eq!(child["data"]["isolated"], true);
@@ -369,6 +374,9 @@ fn elevated_and_remote_shells_bootstrap_and_return_to_the_parent() {
             "{command}: {completions}"
         );
         shell.input("exit", 2, "\r");
+        if command.starts_with("ssh ") {
+            assert_eq!(shell.event("ssh-terminal")["data"], false);
+        }
         let end = shell.event("command-end");
         assert_eq!(end["shell_id"], parent);
         assert_eq!(end["data"]["command"], command);

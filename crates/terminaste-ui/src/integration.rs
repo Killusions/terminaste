@@ -77,6 +77,15 @@ impl TerminalPane {
         if session.as_deref() != Some(envelope.session.as_str()) {
             return;
         }
+        if name == "ssh-terminal" {
+            if let Some(enabled) = envelope.data.as_bool() {
+                self.surface.ssh_terminal = enabled;
+                if enabled {
+                    self.surface.scroll = 0;
+                }
+            }
+            return;
+        }
         if let Some(shell_id) = &envelope.shell_id {
             if self.surface.shell_id.as_ref() != Some(shell_id) {
                 if let Some(index) = self
@@ -305,6 +314,7 @@ impl TerminalPane {
                         .finish_running_command_matching(Some(&active.command), 0);
                 }
                 self.integration_ready = true;
+                self.surface.ssh_terminal = false;
                 self.surface.input_revision = 0;
                 self.surface.submit_pending = false;
                 self.surface.prompt_ansi = None;
@@ -352,6 +362,7 @@ impl TerminalPane {
                 }
             }
             "command-start" => {
+                self.surface.ssh_terminal = false;
                 self.dismiss_completions();
                 self.editor.clear();
                 self.editor.focus_requested = true;
@@ -407,6 +418,7 @@ impl TerminalPane {
                         .is_none_or(|command| active.command == command)
                 }) {
                     let active = self.active_command.take().unwrap();
+                    self.surface.ssh_terminal = false;
                     self.last_command_summary = Some(format!(
                         "{} exit {exit_code} in {}",
                         active.command,

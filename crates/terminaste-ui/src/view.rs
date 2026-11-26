@@ -1860,9 +1860,10 @@ impl TerminalWindow {
                                 }
                             }
                             if active {
+                                let cursor_col = snapshot.cursor_col.min(snapshot.cols - 1);
                                 let cursor = content.origin
                                     + point(
-                                        cell.width * snapshot.cursor_col as f32,
+                                        cell.width * cursor_col as f32,
                                         cell.height * snapshot.cursor_row as f32,
                                     );
                                 if snapshot.cursor_visible && window.is_window_active() {

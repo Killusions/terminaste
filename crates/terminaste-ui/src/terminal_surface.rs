@@ -29,6 +29,7 @@ pub(super) struct SurfaceState {
     pub bounds: Bounds<Pixels>,
     pub origin: Point<Pixels>,
     pub selecting: bool,
+    pub ssh_terminal: bool,
 }
 
 pub(super) struct ShellContext {
@@ -45,6 +46,7 @@ impl TerminalPane {
     pub(super) fn has_interactive_surface(&self) -> bool {
         let modes = self.model.modes();
         modes.alternate_screen
+            || (self.surface.ssh_terminal && self.model.has_running_command())
             || (self.model.running_command_uses_terminal_surface()
                 && (modes.mouse_reporting || modes.application_cursor))
     }

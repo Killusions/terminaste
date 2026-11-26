@@ -1026,6 +1026,32 @@ mod interaction_tests {
     use super::*;
 
     #[test]
+    fn interactive_ssh_uses_the_cursor_grid_until_the_remote_shell_is_ready_or_exits() {
+        let mut pane = TerminalPane::fake();
+        let command = r#"{"command":"ssh host"}"#;
+        let start = integration_frame_for_tests("ssh-terminal", "true");
+        let end = integration_frame_for_tests("ssh-terminal", "false");
+
+        pane.process_ordered_pty_bytes(&integration_frame_for_tests("command-start", command));
+        assert!(!pane.has_interactive_surface());
+        pane.process_ordered_pty_bytes(&start);
+        pane.process_ordered_pty_bytes(b"remote$ ");
+        assert!(pane.has_interactive_surface());
+        assert!(pane.model.screen_snapshot().cursor_visible);
+
+        pane.process_ordered_pty_bytes(b"\x1b[?25l");
+        assert!(!pane.model.screen_snapshot().cursor_visible);
+        pane.process_ordered_pty_bytes(b"\x1b[?25h");
+        assert!(pane.model.screen_snapshot().cursor_visible);
+
+        pane.process_ordered_pty_bytes(&end);
+        assert!(!pane.has_interactive_surface());
+        pane.process_ordered_pty_bytes(&start);
+        pane.process_ordered_pty_bytes(&integration_frame_for_tests("ready", "{}"));
+        assert!(!pane.has_interactive_surface());
+    }
+
+    #[test]
     fn selected_completion_previews_multiline_text_without_changing_input() {
         let mut pane = TerminalPane::fake();
         pane.editor.set_text("ec".to_owned());
