@@ -4765,7 +4765,7 @@ dependencies = [
 
 [[package]]
 name = "terminaste-app"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "gpui",
  "gpui_platform",
@@ -4775,14 +4775,14 @@ dependencies = [
 
 [[package]]
 name = "terminaste-completion"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "terminaste-core"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "serde",
  "unicode-width",
@@ -4791,7 +4791,7 @@ dependencies = [
 
 [[package]]
 name = "terminaste-integration-tests"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "crossbeam-channel",
  "terminaste-pty",
@@ -4801,7 +4801,7 @@ dependencies = [
 
 [[package]]
 name = "terminaste-pty"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "base64",
@@ -4815,7 +4815,7 @@ dependencies = [
 
 [[package]]
 name = "terminaste-settings"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "directories",
@@ -4828,7 +4828,7 @@ dependencies = [
 
 [[package]]
 name = "terminaste-tools"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "image",
@@ -4839,7 +4839,7 @@ dependencies = [
 
 [[package]]
 name = "terminaste-ui"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "base64",
