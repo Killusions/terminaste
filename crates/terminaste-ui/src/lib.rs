@@ -259,6 +259,24 @@ impl TerminasteApp {
         }
     }
 
+    fn tab_index(&self, id: Uuid) -> Option<usize> {
+        self.tabs.iter().position(|tab| tab.id == id)
+    }
+
+    fn reorder_tab(&mut self, source: Uuid, target: Uuid) -> bool {
+        if source == target {
+            return false;
+        }
+        let (Some(from), Some(to)) = (self.tab_index(source), self.tab_index(target)) else {
+            return false;
+        };
+        let active = self.tabs[self.active_tab].id;
+        let tab = self.tabs.remove(from);
+        self.tabs.insert(to, tab);
+        self.active_tab = self.tab_index(active).unwrap();
+        true
+    }
+
     fn activate_relative_tab(&mut self, delta: isize) {
         self.active_tab = wrap_index(self.active_tab, self.tabs.len(), delta);
     }
@@ -315,6 +333,7 @@ enum SplitDirection {
 }
 
 struct TabState {
+    id: Uuid,
     title: String,
     panes: Vec<TerminalPane>,
     active_pane: usize,
@@ -325,6 +344,7 @@ impl TabState {
     fn new(title: String, settings: &Settings) -> Self {
         let pane = TerminalPane::new(settings);
         Self {
+            id: Uuid::new_v4(),
             title,
             tree: pane_tree::PaneTree::Leaf(pane.id),
             panes: vec![pane],
@@ -334,6 +354,7 @@ impl TabState {
     fn fake(title: String) -> Self {
         let pane = TerminalPane::fake();
         Self {
+            id: Uuid::new_v4(),
             title,
             tree: pane_tree::PaneTree::Leaf(pane.id),
             panes: vec![pane],

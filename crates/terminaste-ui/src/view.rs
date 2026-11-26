@@ -187,6 +187,40 @@ pub struct TerminalWindow {
     _task: gpui::Task<()>,
 }
 
+#[derive(Clone)]
+struct DraggedTab {
+    id: Uuid,
+    index: usize,
+    title: String,
+    width: Pixels,
+    theme: TerminasteTheme,
+}
+
+impl Render for DraggedTab {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .flex()
+            .items_center()
+            .w(self.width)
+            .h(px(24.))
+            .px(px(6.))
+            .rounded(px(3.))
+            .border_1()
+            .border_color(self.theme.border)
+            .bg(self.theme.surface_high.opacity(0.9))
+            .text_color(self.theme.text)
+            .font_family(".SystemUIFont")
+            .text_size(px(12.))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .text_ellipsis()
+                    .child(self.title.clone()),
+            )
+    }
+}
+
 impl TerminalWindow {
     pub fn new(mut app: TerminasteApp, window: &mut Window, cx: &mut Context<Self>) -> Self {
         app.window_bounds = Some(window.window_bounds());
@@ -817,7 +851,8 @@ impl TerminalWindow {
     fn render_header(&mut self, width: Pixels, cx: &mut Context<Self>) -> gpui::Div {
         let theme = self.theme;
         let available = (f32::from(width) - 76.).max(0.);
-        let tab_width = (available / self.app.tabs.len().max(1) as f32).min(160.);
+        let tab_count = self.app.tabs.len();
+        let tab_width = (available / tab_count.max(1) as f32).min(160.);
         let mut header = div()
             .flex()
             .items_center()
@@ -827,6 +862,7 @@ impl TerminalWindow {
             .border_color(theme.border)
             .bg(theme.surface);
         for (index, tab) in self.app.tabs.iter().enumerate() {
+            let id = tab.id;
             let selected = index == self.app.active_tab;
             let title = if tab_width < 28. {
                 (index + 1).to_string()
@@ -834,7 +870,7 @@ impl TerminalWindow {
                 tab.compact_title()
             };
             let tab = div()
-                .id(("tab", index))
+                .id(id)
                 .flex()
                 .items_center()
                 .h(px(24.))
@@ -847,35 +883,66 @@ impl TerminalWindow {
                 .when(selected, |tab| tab.bg(theme.surface_high))
                 .hover(|tab| tab.bg(theme.surface_high))
                 .cursor_pointer()
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(move |this, _, window, cx| {
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    if let Some(index) = this.app.tab_index(id) {
                         this.app.active_tab = index;
                         this.dismiss_overlay();
                         window.focus(&this.focus, cx);
                         cx.notify();
-                    }),
-                )
+                    }
+                }))
                 .on_mouse_down(
                     MouseButton::Middle,
                     cx.listener(move |this, _, _, cx| {
-                        this.app.close_tab(index);
-                        cx.notify();
+                        if let Some(index) = this.app.tab_index(id) {
+                            this.app.close_tab(index);
+                            cx.notify();
+                        }
                     }),
                 )
+                .on_drag(
+                    DraggedTab {
+                        id,
+                        index,
+                        title: title.clone(),
+                        width: px(tab_width),
+                        theme,
+                    },
+                    |tab, _, _, cx| cx.new(|_| tab.clone()),
+                )
+                .drag_over::<DraggedTab>(move |tab, dragged, _, _| {
+                    if index < dragged.index {
+                        tab.bg(theme.active_option)
+                            .border_color(theme.accent)
+                            .border_l_2()
+                    } else if index > dragged.index {
+                        tab.bg(theme.active_option)
+                            .border_color(theme.accent)
+                            .border_r_2()
+                    } else {
+                        tab
+                    }
+                })
+                .on_drop(cx.listener(move |this, tab: &DraggedTab, _, cx| {
+                    if this.app.reorder_tab(tab.id, id) {
+                        cx.notify();
+                    }
+                }))
                 .child(div().flex_1().min_w_0().text_ellipsis().child(title))
                 .when(tab_width >= 44., |tab| {
                     tab.child(
-                        button(("close-tab", index), "×", theme)
+                        button("close-tab", "×", theme)
                             .w(px(16.))
                             .h(px(20.))
                             .text_size(px(15.))
                             .on_mouse_down(
                                 MouseButton::Left,
                                 cx.listener(move |this, _, _, cx| {
-                                    this.app.close_tab(index);
+                                    if let Some(index) = this.app.tab_index(id) {
+                                        this.app.close_tab(index);
+                                        cx.notify();
+                                    }
                                     cx.stop_propagation();
-                                    cx.notify();
                                 }),
                             ),
                     )
@@ -883,15 +950,35 @@ impl TerminalWindow {
             header = header.child(tab);
         }
         header
-            .child(div().id("empty-tab-bar").flex_1().h_full().on_mouse_down(
-                MouseButton::Left,
-                cx.listener(|this, event: &gpui::MouseDownEvent, _, cx| {
-                    if event.click_count == 2 {
-                        this.app.new_tab();
-                        cx.notify();
-                    }
-                }),
-            ))
+            .child(
+                div()
+                    .id("empty-tab-bar")
+                    .flex_1()
+                    .h_full()
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|this, event: &gpui::MouseDownEvent, _, cx| {
+                            if event.click_count == 2 {
+                                this.app.new_tab();
+                                cx.notify();
+                            }
+                        }),
+                    )
+                    .drag_over::<DraggedTab>(move |bar, dragged, _, _| {
+                        if dragged.index + 1 < tab_count {
+                            bar.border_color(theme.accent).border_l_2()
+                        } else {
+                            bar
+                        }
+                    })
+                    .on_drop(cx.listener(|this, tab: &DraggedTab, _, cx| {
+                        if let Some(last) = this.app.tabs.last() {
+                            if this.app.reorder_tab(tab.id, last.id) {
+                                cx.notify();
+                            }
+                        }
+                    })),
+            )
             .child(
                 button("new-tab", "+", theme)
                     .w(px(24.))

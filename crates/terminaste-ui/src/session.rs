@@ -137,6 +137,7 @@ impl SavedSession {
                     })
                     .collect::<Vec<_>>();
                 TabState {
+                    id: Uuid::new_v4(),
                     title: tab.title,
                     active_pane: tab.active_pane.min(panes.len() - 1),
                     tree: tab.tree,
@@ -258,6 +259,52 @@ mod tests {
             .unwrap();
         assert_eq!(app.window_bounds(), None);
         assert_eq!(SavedWindow::Windowed([0., 0., 0., 650.]).restore(), None);
+    }
+
+    #[test]
+    fn reordered_tabs_keep_the_active_pane_and_restore_in_the_new_order() {
+        let mut app = TerminasteApp::headless_for_tests(Settings::default());
+        app.new_tab();
+        app.split_active_for_tests();
+        let active_pane = app.active_terminal().unwrap().id;
+        app.new_tab();
+        app.new_tab();
+        app.active_tab = 1;
+
+        let [first, second, third, fourth] = std::array::from_fn(|index| app.tabs[index].id);
+        assert!(app.reorder_tab(first, third));
+        assert_eq!(app.active_tab, 0);
+        assert_eq!(app.active_terminal().unwrap().id, active_pane);
+        assert!(app.reorder_tab(second, fourth));
+        assert_eq!(app.active_tab, 3);
+        assert!(app.reorder_tab(second, first));
+        assert_eq!(app.active_tab, 1);
+        assert_eq!(app.active_terminal().unwrap().id, active_pane);
+        assert!(!app.reorder_tab(second, second));
+        assert!(!app.reorder_tab(Uuid::nil(), first));
+        assert_eq!(
+            std::array::from_fn::<_, 4, _>(|index| app.tabs[index].id),
+            [third, second, first, fourth]
+        );
+
+        let saved = serde_json::to_string(&SavedSession::capture(&app)).unwrap();
+        let mut restored = TerminasteApp::headless_for_tests(Settings::default());
+        serde_json::from_str::<SavedSession>(&saved)
+            .unwrap()
+            .apply(&mut restored)
+            .unwrap();
+        assert_eq!(restored.active_terminal().unwrap().id, active_pane);
+        let restored_order = restored
+            .tabs
+            .iter()
+            .map(|tab| tab.panes[0].id)
+            .collect::<Vec<_>>();
+        let current_order = app
+            .tabs
+            .iter()
+            .map(|tab| tab.panes[0].id)
+            .collect::<Vec<_>>();
+        assert_eq!(restored_order, current_order);
     }
 
     #[test]
