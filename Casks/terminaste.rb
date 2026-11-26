@@ -1,5 +1,5 @@
 cask "terminaste" do
-  version "0.2.0"
+  version "0.2.1"
   sha256 :no_check
 
   url "https://github.com/Killusions/terminaste/releases/download/v#{version}/terminaste-macos-arm64.tar.gz"

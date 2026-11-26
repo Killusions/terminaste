@@ -61,7 +61,7 @@ fn write_licenses(out_dir: Option<PathBuf>) -> anyhow::Result<()> {
 
 fn cargo_lock_packages(path: &Path) -> anyhow::Result<Vec<LockedPackage>> {
     let lock = std::fs::read_to_string(path)?;
-    let value = lock.parse::<toml::Value>()?;
+    let value = toml::from_str::<toml::Value>(&lock)?;
     let package_values = value
         .get("package")
         .and_then(toml::Value::as_array)
@@ -105,7 +105,8 @@ fn cargo_lock_packages(path: &Path) -> anyhow::Result<Vec<LockedPackage>> {
 }
 
 fn workspace_package_names() -> anyhow::Result<BTreeSet<String>> {
-    let workspace = std::fs::read_to_string("Cargo.toml")?.parse::<toml::Value>()?;
+    let workspace = std::fs::read_to_string("Cargo.toml")?;
+    let workspace = toml::from_str::<toml::Value>(&workspace)?;
     let members = workspace
         .get("workspace")
         .and_then(|workspace| workspace.get("members"))
@@ -121,7 +122,8 @@ fn workspace_package_names() -> anyhow::Result<BTreeSet<String>> {
         if !manifest.exists() {
             continue;
         }
-        let value = std::fs::read_to_string(manifest)?.parse::<toml::Value>()?;
+        let manifest = std::fs::read_to_string(manifest)?;
+        let value = toml::from_str::<toml::Value>(&manifest)?;
         if let Some(name) = value
             .get("package")
             .and_then(|package| package.get("name"))

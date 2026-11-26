@@ -13,6 +13,5 @@ description = "Parseable terminal state and command blocks for terminaste"
 
 [dependencies]
 serde.workspace = true
-thiserror.workspace = true
 unicode-width.workspace = true
 uuid.workspace = true

@@ -13,7 +13,7 @@ members = [
 default-members = ["crates/terminaste-app"]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 license = "MIT"
 authors = ["terminaste contributors"]
@@ -24,23 +24,21 @@ keywords = ["terminal", "shell", "zsh", "macos"]
 categories = ["command-line-utilities", "development-tools"]
 
 [workspace.dependencies]
-anyhow = "1.0.98"
-base64 = "0.22.1"
-crossbeam-channel = "0.5.15"
+anyhow = "1.0.105"
+base64 = "0.23.1"
+crossbeam-channel = "0.5.17"
 directories = "6.0.0"
-gpui = { git = "https://github.com/zed-industries/zed", rev = "ba7da93e5ccc2b630077b2ae26c7581f3c21f984" }
-gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "ba7da93e5ccc2b630077b2ae26c7581f3c21f984", features = ["runtime_shaders", "font-kit", "wayland", "x11"] }
-image = { version = "0.25.6", default-features = false, features = ["png"] }
-portable-pty = "0.8.1"
-resvg = "0.45.1"
-schemars = { version = "0.8.22", features = ["preserve_order"] }
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
-serde_yaml = "0.9.34"
-thiserror = "2.0.12"
-toml = "0.8.22"
-unicode-width = "0.2.0"
-uuid = { version = "1.17.0", features = ["v4", "serde"] }
+gpui = { git = "https://github.com/zed-industries/zed", rev = "610ea4b8de1c6e887f03563f067278002f41256e" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "610ea4b8de1c6e887f03563f067278002f41256e", features = ["runtime_shaders", "font-kit", "wayland", "x11"] }
+image = { version = "0.25.10", default-features = false, features = ["png"] }
+portable-pty = "0.9.0"
+schemars = { version = "1.2.3", features = ["preserve_order"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+toml = "1.2.3"
+unicode-width = "0.2.3"
+uuid = { version = "1.29.3", features = ["v4", "serde"] }
+yaml_serde = "0.10.7"
 
 [profile.dev]
 debug = "line-tables-only"

@@ -578,7 +578,9 @@ pub fn save_settings(path: &Path, settings: &Settings) -> anyhow::Result<()> {
 }
 
 pub fn settings_schema_json() -> anyhow::Result<String> {
-    let schema = schemars::schema_for!(Settings);
+    let schema = schemars::generate::SchemaSettings::draft07()
+        .into_generator()
+        .into_root_schema_for::<Settings>();
     Ok(serde_json::to_string_pretty(&schema)?)
 }
 
@@ -815,10 +817,10 @@ pub fn load_keybinding_overrides(path: &Path) -> Result<KeybindingOverrides, Str
 }
 
 pub fn parse_keybinding_overrides(raw: &str) -> Result<KeybindingOverrides, String> {
-    let yaml: BTreeMap<String, serde_yaml::Value> =
-        serde_yaml::from_str(raw).map_err(|error| error.to_string())?;
+    let yaml: BTreeMap<String, yaml_serde::Value> =
+        yaml_serde::from_str(raw).map_err(|error| error.to_string())?;
     let entries = match yaml.get("bindings") {
-        Some(serde_yaml::Value::Mapping(mapping)) => mapping,
+        Some(yaml_serde::Value::Mapping(mapping)) => mapping,
         Some(_) => return Err("bindings must be a mapping".to_owned()),
         None => return Ok(BTreeMap::new()),
     };
@@ -829,7 +831,7 @@ pub fn parse_keybinding_overrides(raw: &str) -> Result<KeybindingOverrides, Stri
             return Err("binding action keys must be strings".to_owned());
         };
         let action: KeybindingAction =
-            serde_yaml::from_value(serde_yaml::Value::String(action_name.to_owned()))
+            yaml_serde::from_value(yaml_serde::Value::String(action_name.to_owned()))
                 .map_err(|error| error.to_string())?;
         let value = parse_keybinding_override(raw_binding)?;
         overrides.insert(action, value);
@@ -876,15 +878,15 @@ fn resolved_keybindings_with_issues(
     resolved
 }
 
-fn parse_keybinding_override(value: &serde_yaml::Value) -> Result<KeybindingOverride, String> {
+fn parse_keybinding_override(value: &yaml_serde::Value) -> Result<KeybindingOverride, String> {
     match value {
-        serde_yaml::Value::String(text) if text == "remove" || text == "-" => {
+        yaml_serde::Value::String(text) if text == "remove" || text == "-" => {
             Ok(KeybindingOverride::Remove)
         }
-        serde_yaml::Value::String(text) => {
+        yaml_serde::Value::String(text) => {
             Ok(KeybindingOverride::Bind(vec![normalize_shortcut(text)]))
         }
-        serde_yaml::Value::Sequence(values) => {
+        yaml_serde::Value::Sequence(values) => {
             let mut shortcuts = Vec::new();
             for value in values {
                 let Some(shortcut) = value.as_str() else {
@@ -894,14 +896,14 @@ fn parse_keybinding_override(value: &serde_yaml::Value) -> Result<KeybindingOver
             }
             Ok(KeybindingOverride::Bind(shortcuts))
         }
-        serde_yaml::Value::Mapping(mapping) => {
+        yaml_serde::Value::Mapping(mapping) => {
             if mapping
-                .get(serde_yaml::Value::String("remove".to_owned()))
-                .and_then(serde_yaml::Value::as_bool)
+                .get(yaml_serde::Value::String("remove".to_owned()))
+                .and_then(yaml_serde::Value::as_bool)
                 .unwrap_or(false)
             {
                 Ok(KeybindingOverride::Remove)
-            } else if let Some(bindings) = mapping.get(serde_yaml::Value::String("keys".to_owned()))
+            } else if let Some(bindings) = mapping.get(yaml_serde::Value::String("keys".to_owned()))
             {
                 parse_keybinding_override(bindings)
             } else {

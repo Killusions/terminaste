@@ -1763,42 +1763,40 @@ impl TerminalWindow {
                     cx.notify();
                 }),
             )
-            .on_scroll_wheel(
-                cx.listener(move |this, event: &gpui::ScrollWheelEvent, _, cx| {
-                    let cell = this.cell;
-                    if let Some(pane) = this.app.pane_mut(id) {
-                        pane.surface.wheel -= event.delta.pixel_delta(cell.height).y / cell.height;
-                        let lines = pane.surface.wheel.trunc() as isize;
-                        pane.surface.wheel -= lines as f32;
-                        let col = ((event.position.x - pane.surface.origin.x) / cell.width)
-                            .floor()
-                            .max(0.) as usize;
-                        let row = ((event.position.y - pane.surface.origin.y) / cell.height)
-                            .floor()
-                            .max(0.) as usize;
-                        if pane.model.modes().mouse_reporting && !event.modifiers.shift {
-                            pane.write_terminal(encode_mouse_wheel_sgr(
-                                lines,
-                                col.min(pane.cols as usize - 1),
-                                row.min(pane.rows as usize - 1),
-                            ));
-                        } else if pane.model.modes().alternate_screen {
-                            pane.write_terminal(terminaste_core::encode_alternate_scroll(
-                                lines,
-                                pane.model.modes(),
-                            ));
-                        } else {
-                            pane.surface.scroll = pane
-                                .surface
-                                .scroll
-                                .saturating_add_signed(lines)
-                                .min(pane.model.scrollback_len());
-                        }
+            .on_scroll(cx.listener(move |this, event: &gpui::ScrollEvent, _, cx| {
+                let cell = this.cell;
+                if let Some(pane) = this.app.pane_mut(id) {
+                    pane.surface.wheel -= event.delta.pixel_delta(cell.height).y / cell.height;
+                    let lines = pane.surface.wheel.trunc() as isize;
+                    pane.surface.wheel -= lines as f32;
+                    let col = ((event.position.x - pane.surface.origin.x) / cell.width)
+                        .floor()
+                        .max(0.) as usize;
+                    let row = ((event.position.y - pane.surface.origin.y) / cell.height)
+                        .floor()
+                        .max(0.) as usize;
+                    if pane.model.modes().mouse_reporting && !event.modifiers.shift {
+                        pane.write_terminal(encode_mouse_wheel_sgr(
+                            lines,
+                            col.min(pane.cols as usize - 1),
+                            row.min(pane.rows as usize - 1),
+                        ));
+                    } else if pane.model.modes().alternate_screen {
+                        pane.write_terminal(terminaste_core::encode_alternate_scroll(
+                            lines,
+                            pane.model.modes(),
+                        ));
+                    } else {
+                        pane.surface.scroll = pane
+                            .surface
+                            .scroll
+                            .saturating_add_signed(lines)
+                            .min(pane.model.scrollback_len());
                     }
-                    cx.stop_propagation();
-                    cx.notify();
-                }),
-            )
+                }
+                cx.stop_propagation();
+                cx.notify();
+            }))
             .child(
                 canvas(
                     |_, _, _| (),
